@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev -- --host)",
+      "Bash(npm run dev)",
+      "Bash(npx firebase-tools deploy --only firestore:rules --project one-bite-inspectionss)",
+      "Bash(npx firebase-tools login --reauth)"
+    ]
+  }
+}
