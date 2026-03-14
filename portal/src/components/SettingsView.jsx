@@ -27,7 +27,36 @@ function rangeLabel(min, max) {
 
 const parseNum = (v) => (v === '' || v === null || v === undefined) ? null : parseFloat(v);
 
-export function SettingsView({ user, inspCats, setInspCats, tempItems, setTempItems, appliances, setAppliances, tempRequired, setTempRequired, appliancesRequired, setAppliancesRequired }) {
+function HasletAddressField({ value, onSave }) {
+    const [draft, setDraft] = useState(value || '');
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+    const handleSave = async () => {
+        setSaving(true);
+        await onSave(draft.trim());
+        setSaving(false);
+        setSaved(true);
+    };
+    return (
+        <div style={{ display: "flex", alignItems: "flex-end", gap: "10px" }}>
+            <div style={{ flex: 1 }}>
+                <label style={lbl}>Current Address</label>
+                <input value={draft} onChange={e => { setDraft(e.target.value); setSaved(false); }}
+                    placeholder="e.g. 123 Main St, Haslet, TX 76052"
+                    style={{ ...inp, width: "100%" }} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <button onClick={handleSave} disabled={saving}
+                    style={{ ...gbtn, padding: "8px 18px", fontSize: "13px", opacity: saving ? 0.6 : 1 }}>
+                    {saving ? "Saving…" : "Update"}
+                </button>
+                {saved && <span style={{ fontSize: "11px", color: "#16a34a", fontWeight: "600", textAlign: "center" }}>✓ Saved</span>}
+            </div>
+        </div>
+    );
+}
+
+export function SettingsView({ user, inspCats, setInspCats, tempItems, setTempItems, appliances, setAppliances, tempRequired, setTempRequired, appliancesRequired, setAppliancesRequired, hasletAddress, setHasletAddress }) {
     // ── Category section state ──
     const [editCatId, setEditCatId] = useState(null);
     const [editCatName, setEditCatName] = useState('');
@@ -176,6 +205,15 @@ export function SettingsView({ user, inspCats, setInspCats, tempItems, setTempIt
                 <div style={{ marginTop: "10px", fontSize: "12px", color: "#888" }}>
                     Current code: <strong style={{ color: BK, letterSpacing: "0.08em" }}>{inviteCode}</strong>
                 </div>
+            </Card>
+
+            {/* ── HASLET ADDRESS ── */}
+            <Card style={{ marginBottom: "24px" }}>
+                <div style={secHead}>Haslet Location Address</div>
+                <div style={{ fontSize: "12px", color: "#888", marginBottom: "14px" }}>
+                    Haslet is a food truck — update the current address here whenever it moves.
+                </div>
+                <HasletAddressField value={hasletAddress} onSave={setHasletAddress} />
             </Card>
 
             {/* ── INSPECTION CATEGORIES ── */}

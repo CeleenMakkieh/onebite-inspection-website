@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import emailjs from '@emailjs/browser';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from './firebase';
 import { LoginPage } from './components/LoginPage';
@@ -28,6 +29,7 @@ export default function App() {
     const [appliances, setAppliances] = useState(DEF_APPL);
     const [tempRequired, setTempRequired] = useState(true);
     const [appliancesRequired, setAppliancesRequired] = useState(true);
+    const [hasletAddress, setHasletAddress] = useState('');
     const [dailyTasks, setDailyTasks] = useState(DEF_TASKS);
     const [completions, setCompletions] = useState({});
 
@@ -83,6 +85,7 @@ export default function App() {
                     if (s.appliances) setAppliances(s.appliances);
                     if (s.tempRequired !== undefined) setTempRequired(s.tempRequired);
                     if (s.appliancesRequired !== undefined) setAppliancesRequired(s.appliancesRequired);
+                    if (s.hasletAddress !== undefined) setHasletAddress(s.hasletAddress);
                 }
             } catch (err) {
                 console.error("Error loading data from Firebase:", err);
@@ -129,6 +132,10 @@ export default function App() {
         setAppliancesRequired(val);
         try { await saveSetting('appliancesRequired', val); } catch (e) { console.error(e); }
     };
+    const updateHasletAddress = async (val) => {
+        setHasletAddress(val);
+        try { await saveSetting('hasletAddress', val); } catch (e) { console.error(e); }
+    };
 
     // ── Daily task handlers (persist to Firebase) ──
     const handleAddTask = async (taskData) => {
@@ -155,6 +162,7 @@ export default function App() {
             date: todayKey,
             assignedTo: user.name,
             submittedBy: user.name,
+            location: "",
             notes: "",
             results: {},
             tempReadings: {},
@@ -180,6 +188,21 @@ export default function App() {
             setReports(prev => [finalInsp, ...prev]);
             setView("dashboard");
             setNewInsp(null);
+            // Send email notification (fire and forget — don't block UI)
+            emailjs.send(
+                import.meta.env.VITE_EMAILJS_SERVICE_ID,
+                import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
+                {
+                    location: finalInsp.location || "Unknown",
+                    score: finalInsp.score,
+                    submitted_by: finalInsp.submittedBy,
+                    assigned_to: finalInsp.assignedTo,
+                    date: finalInsp.date,
+                    status: finalInsp.status,
+                    to_email: "onebite.texas@gmail.com",
+                },
+                import.meta.env.VITE_EMAILJS_PUBLIC_KEY
+            ).catch(err => console.warn("Email notification failed:", err));
         } catch (e) {
             console.error("Failed to save report:", e);
             alert("Failed to save report: " + (e.message || "Unknown error"));
@@ -260,12 +283,12 @@ export default function App() {
                 </div>
 
                 <div style={{ padding: "24px 32px" }}>
-                    {view === "dashboard" && <DashView reports={reports} setView={setView} setSelReport={setSelReport} />}
+                    {view === "dashboard" && <DashView reports={reports} setView={setView} setSelReport={setSelReport} hasletAddress={hasletAddress} />}
                     {view === "new" && newInsp && <NewInspView inspection={newInsp} setInspection={setNewInsp} onSubmit={submitInsp} onCancel={() => setView("dashboard")} inspCats={inspCats} tempItems={tempItems} appliances={appliances} tempRequired={tempRequired} appliancesRequired={appliancesRequired} />}
                     {view === "reports" && <RepsView reports={reports} filterStatus={filterStatus} setFilterStatus={setFilterStatus} setSelReport={setSelReport} setView={setView} />}
                     {view === "detail" && selReport && <DetailView report={selReport} onBack={() => setView("reports")} tempItems={tempItems} appliances={appliances} onReview={markReviewed} />}
                     {view === "daily" && <DailyView dailyTasks={dailyTasks} onAdd={handleAddTask} onRemove={handleRemoveTask} onEdit={handleEditTask} completions={completions[todayKey] || {}} setCompletions={updateCompletions} />}
-                    {view === "settings" && <SettingsView user={user} inspCats={inspCats} setInspCats={updateInspCats} tempItems={tempItems} setTempItems={updateTempItems} appliances={appliances} setAppliances={updateAppliances} tempRequired={tempRequired} setTempRequired={updateTempRequired} appliancesRequired={appliancesRequired} setAppliancesRequired={updateAppliancesRequired} />}
+                    {view === "settings" && <SettingsView user={user} inspCats={inspCats} setInspCats={updateInspCats} tempItems={tempItems} setTempItems={updateTempItems} appliances={appliances} setAppliances={updateAppliances} tempRequired={tempRequired} setTempRequired={updateTempRequired} appliancesRequired={appliancesRequired} setAppliancesRequired={updateAppliancesRequired} hasletAddress={hasletAddress} setHasletAddress={updateHasletAddress} />}
                 </div>
             </div>
         </div>

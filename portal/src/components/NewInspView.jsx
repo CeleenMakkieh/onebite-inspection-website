@@ -64,7 +64,7 @@ export function NewInspView({ inspection, setInspection, onSubmit, onCancel, ins
     return (
         <div style={{ maxWidth: "800px" }}>
             <Card style={{ marginBottom: "22px" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "14px" }}>
                     <div>
                         <label style={lbl}>Date <span style={{ color: "#dc2626" }}>*</span></label>
                         <input type="date" value={inspection.date} onChange={e => upd("date", e.target.value)} style={{ ...inp, width: "100%" }} />
@@ -72,6 +72,15 @@ export function NewInspView({ inspection, setInspection, onSubmit, onCancel, ins
                     <div>
                         <label style={lbl}>Assign To <span style={{ color: "#dc2626" }}>*</span></label>
                         <input value={inspection.assignedTo} onChange={e => upd("assignedTo", e.target.value)} placeholder="Staff name" style={{ ...inp, width: "100%" }} />
+                    </div>
+                    <div>
+                        <label style={lbl}>Location <span style={{ color: "#dc2626" }}>*</span></label>
+                        <select value={inspection.location || ""} onChange={e => upd("location", e.target.value)} style={{ ...inp, width: "100%" }}>
+                            <option value="">Select location…</option>
+                            <option>Richardson</option>
+                            <option>Fort Worth</option>
+                            <option>Haslet</option>
+                        </select>
                     </div>
                     <div style={{ display: "flex", alignItems: "flex-end" }}>
                         <div style={{ flex: 1, padding: "12px", background: PINK, borderRadius: "10px", textAlign: "center", border: `1.5px solid rgba(0,138,95,0.2)` }}>
