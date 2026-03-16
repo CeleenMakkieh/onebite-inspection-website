@@ -64,8 +64,7 @@ export function LoginPage({ onLogin }) {
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
     const [name, setName] = useState('');
-    const [role, setRole] = useState('Manager');
-    const [inviteCode, setInviteCode] = useState('');
+    const [regCode, setRegCode] = useState('');
     const [err, setErr] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [load, setLoad] = useState(false);
@@ -79,7 +78,7 @@ export function LoginPage({ onLogin }) {
             const cred = await signInWithEmailAndPassword(auth, email, password);
             const profile = await fetchUserProfile(cred.user.uid);
             if (!profile) { setErr('Account has no profile. Contact the owner.'); setLoad(false); return; }
-            onLogin({ uid: cred.user.uid, email: cred.user.email, name: profile.name, role: profile.role });
+            onLogin({ uid: cred.user.uid, email: cred.user.email, name: profile.name, role: profile.role, location: profile.location || null });
         } catch (e) {
             setErr(authErrMsg(e));
             setLoad(false);
@@ -87,22 +86,34 @@ export function LoginPage({ onLogin }) {
     };
 
     const handleRegister = async () => {
-        if (!name.trim() || !email || !password || !confirm || !inviteCode.trim()) { setErr('All fields are required.'); return; }
+        if (!name.trim() || !email || !password || !confirm || !regCode.trim()) { setErr('All fields are required.'); return; }
         if (password.length < 6) { setErr('Password must be at least 6 characters.'); return; }
         if (password !== confirm) { setErr('Passwords do not match.'); return; }
         setLoad(true); setErr('');
         try {
             const settings = await fetchSettings();
-            const storedCode = settings.inviteCode || 'ONEBITE';
-            if (inviteCode.trim().toUpperCase() !== storedCode.toUpperCase()) {
-                setErr('Invalid invite code. Contact the owner.');
+            const codes = settings.locationCodes || {};
+            const entered = regCode.trim().toUpperCase();
+            const matchedKey = Object.keys(codes).find(k => codes[k].toUpperCase() === entered);
+            if (!matchedKey) {
+                setErr('Invalid registration code. Contact the owner.');
                 setLoad(false);
                 return;
             }
+            let derivedRole, derivedLocation;
+            if (matchedKey === 'owner') {
+                derivedRole = 'Owner';
+                derivedLocation = null;
+            } else {
+                const parts = matchedKey.split('-'); // e.g. ["Fort Worth", "staff"] or ["Richardson", "manager"]
+                const roleSlug = parts[parts.length - 1];
+                derivedLocation = parts.slice(0, -1).join('-');
+                derivedRole = roleSlug.charAt(0).toUpperCase() + roleSlug.slice(1);
+            }
             const cred = await createUserWithEmailAndPassword(auth, email, password);
-            const profile = { name: name.trim(), role, email };
+            const profile = { name: name.trim(), role: derivedRole, email, location: derivedLocation };
             await saveUserProfile(cred.user.uid, profile);
-            onLogin({ uid: cred.user.uid, email, name: name.trim(), role });
+            onLogin({ uid: cred.user.uid, email, name: name.trim(), role: derivedRole, location: derivedLocation });
         } catch (e) {
             setErr(authErrMsg(e));
             setLoad(false);
@@ -188,20 +199,12 @@ export function LoginPage({ onLogin }) {
                                 onFocus={e => e.target.style.borderColor = G} onBlur={e => e.target.style.borderColor = "#ccc"} />
                         </div>
                         <div style={fieldStyle}>
-                            <label style={lbl}>Role</label>
-                            <select value={role} onChange={e => setRole(e.target.value)}
-                                style={{ ...inp, width: "100%", padding: "11px 14px", boxSizing: "border-box" }}>
-                                <option>Owner</option>
-                                <option>Manager</option>
-                                <option>Staff</option>
-                            </select>
-                        </div>
-                        <div style={fieldStyle}>
-                            <label style={lbl}>Invite Code <span style={{ color: "#dc2626" }}>*</span></label>
-                            <input value={inviteCode} onChange={e => setInviteCode(e.target.value)} onKeyDown={handleKey}
-                                placeholder="Enter invite code"
-                                style={{ ...inp, width: "100%", padding: "11px 14px", boxSizing: "border-box" }}
+                            <label style={lbl}>Registration Code <span style={{ color: "#dc2626" }}>*</span></label>
+                            <input value={regCode} onChange={e => setRegCode(e.target.value)} onKeyDown={handleKey}
+                                placeholder="Enter your registration code"
+                                style={{ ...inp, width: "100%", padding: "11px 14px", boxSizing: "border-box", textTransform: "uppercase", letterSpacing: "0.08em" }}
                                 onFocus={e => e.target.style.borderColor = G} onBlur={e => e.target.style.borderColor = "#ccc"} />
+                            <div style={{ fontSize: "11px", color: "#888", marginTop: "5px" }}>Your role and location will be assigned automatically based on this code.</div>
                         </div>
                         <div style={fieldStyle}>
                             <label style={lbl}>Email</label>

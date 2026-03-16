@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { Card, CheckRow, PFBtns, sh, inp, lbl, gbtn, ghos } from './ui';
 import { G, PINK, BK, WH } from '../constants';
 
@@ -18,8 +18,14 @@ function rangeLabel(min, max) {
     return null;
 }
 
-export function NewInspView({ inspection, setInspection, onSubmit, onCancel, inspCats, tempItems, appliances, tempRequired, appliancesRequired }) {
+export function NewInspView({ inspection, setInspection, onSubmit, onCancel, inspCats, tempItems, appliances, tempRequired, appliancesRequired, user }) {
     const photoRef = useRef(null);
+
+    useEffect(() => {
+        if (user && user.role === 'Manager' && user.location && !inspection.location) {
+            setInspection(p => ({ ...p, location: user.location }));
+        }
+    }, []);
     const upd = (k, v) => setInspection(p => ({ ...p, [k]: v }));
     const setRes = (catId, item, v) => setInspection(p => ({ ...p, results: { ...p.results, [`${catId}__${item}`]: v } }));
     const getRes = (catId, item) => inspection.results[`${catId}__${item}`];
@@ -75,7 +81,9 @@ export function NewInspView({ inspection, setInspection, onSubmit, onCancel, ins
                     </div>
                     <div>
                         <label style={lbl}>Location <span style={{ color: "#dc2626" }}>*</span></label>
-                        <select value={inspection.location || ""} onChange={e => upd("location", e.target.value)} style={{ ...inp, width: "100%" }}>
+                        <select value={inspection.location || ""} onChange={e => upd("location", e.target.value)}
+                            disabled={user && user.role !== 'Owner'}
+                            style={{ ...inp, width: "100%", opacity: user && user.role !== 'Owner' ? 0.7 : 1, cursor: user && user.role !== 'Owner' ? 'default' : 'pointer' }}>
                             <option value="">Select location…</option>
                             <option>Richardson</option>
                             <option>Fort Worth</option>

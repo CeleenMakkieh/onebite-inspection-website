@@ -7,7 +7,8 @@ import {
     getDocs,
     deleteDoc,
     query,
-    orderBy
+    orderBy,
+    where
 } from 'firebase/firestore';
 
 // References to collections
@@ -21,6 +22,13 @@ export async function fetchReports() {
     const q = query(collection(db, REPORTS_COLLECTION), orderBy('date', 'desc'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+export async function fetchReportsByLocation(location) {
+    const q = query(collection(db, REPORTS_COLLECTION), where('location', '==', location));
+    const snapshot = await getDocs(q);
+    const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return docs.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
 export async function saveReport(report) {
@@ -37,6 +45,13 @@ export async function fetchDailyTasks() {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
+export async function fetchDailyTasksByLocation(location) {
+    const q = query(collection(db, DAILY_TASKS_COLLECTION), where('location', '==', location));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
 export async function saveDailyTask(task) {
     const taskRef = doc(collection(db, DAILY_TASKS_COLLECTION), task.id.toString());
     await setDoc(taskRef, task);
@@ -48,17 +63,15 @@ export async function deleteDailyTask(taskId) {
 }
 
 // === Daily Completions ===
-export async function fetchCompletions(dateKey) {
-    const snapshot = await getDocs(collection(db, COMPLETIONS_COLLECTION));
-    let comps = {};
-    snapshot.docs.forEach(doc => {
-        if (doc.id === dateKey) comps = doc.data();
-    });
-    return comps;
+export async function fetchCompletions(dateKey, location) {
+    const docId = location ? `${dateKey}_${location}` : dateKey;
+    const snap = await getDoc(doc(db, COMPLETIONS_COLLECTION, docId));
+    return snap.exists() ? snap.data() : {};
 }
 
-export async function saveCompletions(dateKey, completionsObj) {
-    const compRef = doc(db, COMPLETIONS_COLLECTION, dateKey);
+export async function saveCompletions(dateKey, completionsObj, location) {
+    const docId = location ? `${dateKey}_${location}` : dateKey;
+    const compRef = doc(db, COMPLETIONS_COLLECTION, docId);
     await setDoc(compRef, completionsObj, { merge: true });
 }
 

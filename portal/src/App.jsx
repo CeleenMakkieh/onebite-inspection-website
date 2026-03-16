@@ -11,7 +11,12 @@ import { DailyView } from './components/DailyView';
 import { SettingsView } from './components/SettingsView';
 import { LOGO, PINK, G, BK, WH, DEF_INSP_CATS, DEF_TEMP, DEF_APPL, DEF_TASKS } from './constants';
 import { gbtn } from './components/ui';
-import { fetchReports, saveReport, fetchDailyTasks, saveDailyTask, deleteDailyTask, fetchCompletions, saveCompletions, fetchSettings, saveSetting, fetchUserProfile } from './db';
+import { fetchReports, fetchReportsByLocation, saveReport, fetchDailyTasks, fetchDailyTasksByLocation, saveDailyTask, deleteDailyTask, fetchCompletions, saveCompletions, fetchSettings, saveSetting, fetchUserProfile } from './db';
+
+function normalizeRole(r) {
+    if (!r) return r;
+    return r.charAt(0).toUpperCase() + r.slice(1).toLowerCase();
+}
 
 export default function App() {
     const [user, setUser] = useState(null);
@@ -30,8 +35,10 @@ export default function App() {
     const [tempRequired, setTempRequired] = useState(true);
     const [appliancesRequired, setAppliancesRequired] = useState(true);
     const [hasletAddress, setHasletAddress] = useState('');
+    const [locationCodes, setLocationCodes] = useState({});
     const [dailyTasks, setDailyTasks] = useState(DEF_TASKS);
     const [completions, setCompletions] = useState({});
+    const [locationComps, setLocationComps] = useState({});
 
     const todayKey = new Date().toISOString().split("T")[0];
 
@@ -49,7 +56,7 @@ export default function App() {
                     const profile = await fetchUserProfile(firebaseUser.uid);
                     if (profile) {
                         isUserSetRef.current = true;
-                        setUser({ uid: firebaseUser.uid, email: firebaseUser.email, ...profile });
+                        setUser({ uid: firebaseUser.uid, email: firebaseUser.email, ...profile, role: normalizeRole(profile.role) });
                     }
                 } catch (e) {
                     console.error("Error restoring session:", e);
@@ -68,10 +75,21 @@ export default function App() {
 
         async function loadData() {
             try {
+                const isOwner = user.role === 'Owner';
+                const userLocation = user.location || null;
+
+                const reportsPromise = isOwner
+                    ? fetchReports()
+                    : userLocation ? fetchReportsByLocation(userLocation) : Promise.resolve([]);
+
+                const tasksPromise = isOwner
+                    ? fetchDailyTasks()
+                    : userLocation ? fetchDailyTasksByLocation(userLocation) : Promise.resolve(null);
+
                 const [r, t, c, s] = await Promise.all([
-                    fetchReports(),
-                    fetchDailyTasks(),
-                    fetchCompletions(todayKey),
+                    reportsPromise,
+                    tasksPromise,
+                    fetchCompletions(todayKey, userLocation),
                     fetchSettings()
                 ]);
 
@@ -86,6 +104,16 @@ export default function App() {
                     if (s.tempRequired !== undefined) setTempRequired(s.tempRequired);
                     if (s.appliancesRequired !== undefined) setAppliancesRequired(s.appliancesRequired);
                     if (s.hasletAddress !== undefined) setHasletAddress(s.hasletAddress);
+                    if (s.locationCodes) setLocationCodes(s.locationCodes);
+                }
+
+                // For owner: load each location's completions for the activity report
+                if (isOwner) {
+                    const LOCS = ['Richardson', 'Fort Worth', 'Haslet'];
+                    const lcResults = await Promise.all(LOCS.map(loc => fetchCompletions(todayKey, loc)));
+                    const lc = {};
+                    LOCS.forEach((loc, i) => { lc[loc] = lcResults[i] || {}; });
+                    setLocationComps(lc);
                 }
             } catch (err) {
                 console.error("Error loading data from Firebase:", err);
@@ -94,10 +122,19 @@ export default function App() {
         loadData();
     }, [user]);
 
+    // Guard: redirect away from forbidden views (must be before ALL early returns)
+    useEffect(() => {
+        if (!user) return;
+        const canAccess = user.role === 'Owner';
+        const canView = user.role === 'Owner' || user.role === 'Manager';
+        if (!canAccess && view === "settings") setView("dashboard");
+        if (!canView && (view === "reports" || view === "new" || view === "detail")) setView("dashboard");
+    }, [user, view]);
+
     // Called directly by LoginPage after successful sign-in / register
     const handleLogin = (u) => {
         isUserSetRef.current = true;
-        setUser(u);
+        setUser({ ...u, role: normalizeRole(u.role) });
         setAuthLoading(false);
     };
 
@@ -139,7 +176,8 @@ export default function App() {
 
     // ── Daily task handlers (persist to Firebase) ──
     const handleAddTask = async (taskData) => {
-        const task = { ...taskData, id: Date.now() };
+        const location = user.role === 'Owner' ? (taskData.location || 'Richardson') : user.location;
+        const task = { ...taskData, id: Date.now(), location };
         setDailyTasks(prev => [...prev, task]);
         try { await saveDailyTask(task); } catch (e) { console.error(e); }
     };
@@ -222,15 +260,20 @@ export default function App() {
 
     const updateCompletions = async (newComps) => {
         setCompletions(prev => ({ ...prev, [todayKey]: newComps }));
-        await saveCompletions(todayKey, newComps);
+        await saveCompletions(todayKey, newComps, user.location || null);
     };
+
+    const canManageTasks = user.role === 'Owner' || user.role === 'Manager';
+    const canViewReports = user.role === 'Owner' || user.role === 'Manager';
+    const canAccessSettings = user.role === 'Owner';
+    const needsLocation = user.role !== 'Owner' && !user.location;
 
     const nav = [
         { id: "dashboard", label: "Dashboard", icon: "⊞" },
-        { id: "new", label: "New Inspection", icon: "＋" },
-        { id: "reports", label: "All Reports", icon: "≡" },
+        ...(canViewReports ? [{ id: "new", label: "New Inspection", icon: "＋" }] : []),
+        ...(canViewReports ? [{ id: "reports", label: "All Reports", icon: "≡" }] : []),
         { id: "daily", label: "Daily Tasks", icon: "✓" },
-        { id: "settings", label: "Settings", icon: "⚙" }
+        ...(canAccessSettings ? [{ id: "settings", label: "Settings", icon: "⚙" }] : []),
     ];
 
     const titles = {
@@ -263,6 +306,7 @@ export default function App() {
                     <div style={{ padding: "10px 12px", background: "rgba(255,255,255,0.12)", borderRadius: "8px", marginBottom: "10px" }}>
                         <div style={{ fontSize: "13px", color: WH, fontWeight: "700" }}>{user.name}</div>
                         <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.1em" }}>{user.role}</div>
+                        {user.location && <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.55)", marginTop: "2px" }}>{user.location}</div>}
                     </div>
                     <button
                         onClick={() => signOut(auth)}
@@ -279,16 +323,21 @@ export default function App() {
                         <h1 style={{ margin: 0, fontSize: "22px", fontWeight: "800", color: G }}>{titles[view] || "—"}</h1>
                         <div style={{ fontSize: "12px", color: BK, marginTop: "2px" }}>{new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div>
                     </div>
-                    {view === "dashboard" && <button onClick={startNew} style={gbtn}>＋ New Inspection</button>}
+                    {view === "dashboard" && canViewReports && <button onClick={startNew} style={gbtn}>＋ New Inspection</button>}
                 </div>
 
                 <div style={{ padding: "24px 32px" }}>
-                    {view === "dashboard" && <DashView reports={reports} setView={setView} setSelReport={setSelReport} hasletAddress={hasletAddress} />}
-                    {view === "new" && newInsp && <NewInspView inspection={newInsp} setInspection={setNewInsp} onSubmit={submitInsp} onCancel={() => setView("dashboard")} inspCats={inspCats} tempItems={tempItems} appliances={appliances} tempRequired={tempRequired} appliancesRequired={appliancesRequired} />}
-                    {view === "reports" && <RepsView reports={reports} filterStatus={filterStatus} setFilterStatus={setFilterStatus} setSelReport={setSelReport} setView={setView} />}
-                    {view === "detail" && selReport && <DetailView report={selReport} onBack={() => setView("reports")} tempItems={tempItems} appliances={appliances} onReview={markReviewed} />}
-                    {view === "daily" && <DailyView dailyTasks={dailyTasks} onAdd={handleAddTask} onRemove={handleRemoveTask} onEdit={handleEditTask} completions={completions[todayKey] || {}} setCompletions={updateCompletions} />}
-                    {view === "settings" && <SettingsView user={user} inspCats={inspCats} setInspCats={updateInspCats} tempItems={tempItems} setTempItems={updateTempItems} appliances={appliances} setAppliances={updateAppliances} tempRequired={tempRequired} setTempRequired={updateTempRequired} appliancesRequired={appliancesRequired} setAppliancesRequired={updateAppliancesRequired} hasletAddress={hasletAddress} setHasletAddress={updateHasletAddress} />}
+                    {needsLocation && (
+                        <div style={{ marginBottom: "18px", padding: "12px 16px", background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: "8px", fontSize: "13px", color: "#92400e", fontWeight: "600" }}>
+                            Your account has no location assigned. Contact the owner.
+                        </div>
+                    )}
+                    {view === "dashboard" && <DashView reports={reports} setView={setView} setSelReport={setSelReport} hasletAddress={hasletAddress} user={user} dailyTasks={dailyTasks} todayCompletions={completions[todayKey] || {}} canViewReports={canViewReports} locationComps={locationComps} />}
+                    {view === "new" && newInsp && canViewReports && <NewInspView inspection={newInsp} setInspection={setNewInsp} onSubmit={submitInsp} onCancel={() => setView("dashboard")} inspCats={inspCats} tempItems={tempItems} appliances={appliances} tempRequired={tempRequired} appliancesRequired={appliancesRequired} user={user} />}
+                    {view === "reports" && canViewReports && <RepsView reports={reports} filterStatus={filterStatus} setFilterStatus={setFilterStatus} setSelReport={setSelReport} setView={setView} />}
+                    {view === "detail" && selReport && canViewReports && <DetailView report={selReport} onBack={() => setView("reports")} tempItems={tempItems} appliances={appliances} onReview={markReviewed} />}
+                    {view === "daily" && <DailyView dailyTasks={dailyTasks} onAdd={handleAddTask} onRemove={handleRemoveTask} onEdit={handleEditTask} completions={completions[todayKey] || {}} setCompletions={updateCompletions} canManageTasks={canManageTasks} isOwner={user.role === 'Owner'} user={user} />}
+                    {view === "settings" && canAccessSettings && <SettingsView user={user} inspCats={inspCats} setInspCats={updateInspCats} tempItems={tempItems} setTempItems={updateTempItems} appliances={appliances} setAppliances={updateAppliances} tempRequired={tempRequired} setTempRequired={updateTempRequired} appliancesRequired={appliancesRequired} setAppliancesRequired={updateAppliancesRequired} hasletAddress={hasletAddress} setHasletAddress={updateHasletAddress} locationCodes={locationCodes} setLocationCodes={setLocationCodes} />}
                 </div>
             </div>
         </div>

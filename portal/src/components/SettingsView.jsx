@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, inp, lbl, gbtn, ghos } from './ui';
 import { G, WH, BK } from '../constants';
-import { fetchSettings, saveSetting } from '../db';
+import { saveSetting } from '../db';
 
 const secHead = {
     fontSize: "11px", letterSpacing: "0.18em", textTransform: "uppercase",
@@ -56,7 +56,7 @@ function HasletAddressField({ value, onSave }) {
     );
 }
 
-export function SettingsView({ user, inspCats, setInspCats, tempItems, setTempItems, appliances, setAppliances, tempRequired, setTempRequired, appliancesRequired, setAppliancesRequired, hasletAddress, setHasletAddress }) {
+export function SettingsView({ user, inspCats, setInspCats, tempItems, setTempItems, appliances, setAppliances, tempRequired, setTempRequired, appliancesRequired, setAppliancesRequired, hasletAddress, setHasletAddress, locationCodes, setLocationCodes }) {
     // ── Category section state ──
     const [editCatId, setEditCatId] = useState(null);
     const [editCatName, setEditCatName] = useState('');
@@ -76,19 +76,24 @@ export function SettingsView({ user, inspCats, setInspCats, tempItems, setTempIt
     const [addingAppl, setAddingAppl] = useState(false);
     const [newApplData, setNewApplData] = useState({ name: '', targetTemp: '', type: 'Cold', min: '', max: '' });
 
-    // ── Invite code state ──
-    const [inviteCode, setInviteCode] = useState('');
-    const [inviteCodeInput, setInviteCodeInput] = useState('');
-    const [inviteCodeSaving, setInviteCodeSaving] = useState(false);
-    const [inviteCodeSaved, setInviteCodeSaved] = useState(false);
-
-    useEffect(() => {
-        fetchSettings().then(s => {
-            const code = s.inviteCode || 'ONEBITE';
-            setInviteCode(code);
-            setInviteCodeInput(code);
-        });
-    }, []);
+    // ── Registration codes state ──
+    const LOCATIONS_LIST = ['Richardson', 'Fort Worth', 'Haslet'];
+    const generateCode = () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    };
+    const [codesSaving, setCodesSaving] = useState({});
+    const [codesSaved, setCodesSaved] = useState({});
+    const regenCode = async (codeKey) => {
+        const newCode = generateCode();
+        const updated = { ...locationCodes, [codeKey]: newCode };
+        setLocationCodes(updated);
+        setCodesSaving(p => ({ ...p, [codeKey]: true }));
+        await saveSetting('locationCodes', updated);
+        setCodesSaving(p => ({ ...p, [codeKey]: false }));
+        setCodesSaved(p => ({ ...p, [codeKey]: true }));
+        setTimeout(() => setCodesSaved(p => ({ ...p, [codeKey]: false })), 2000);
+    };
 
     // ─── Category helpers ───
     const getCatState = (id) => catItemState[id] || { adding: false, newItem: '', editIdx: null, editVal: '' };
@@ -168,42 +173,49 @@ export function SettingsView({ user, inspCats, setInspCats, tempItems, setTempIt
                 Editing as {roleLabel} — all changes are saved automatically.
             </div>
 
-            {/* ── INVITE CODE ── */}
+            {/* ── REGISTRATION CODES ── */}
             <Card style={{ marginBottom: "24px" }}>
-                <div style={secHead}>Access & Security</div>
-                <div style={{ fontSize: "12px", color: "#888", marginBottom: "14px" }}>
-                    Staff must enter this invite code when creating a new account.
+                <div style={secHead}>Registration Codes</div>
+                <div style={{ fontSize: "12px", color: "#888", marginBottom: "16px" }}>
+                    Staff and managers use these codes when creating accounts. Each code determines their role and location automatically. Regenerate a code to invalidate the old one.
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <div style={{ flex: 1 }}>
-                        <label style={lbl}>Invite Code</label>
-                        <input
-                            value={inviteCodeInput}
-                            onChange={e => { setInviteCodeInput(e.target.value); setInviteCodeSaved(false); }}
-                            placeholder="e.g. ONEBITE"
-                            style={{ ...inp, width: "100%", fontWeight: "700", letterSpacing: "0.08em", textTransform: "uppercase" }}
-                        />
+                {LOCATIONS_LIST.map(loc => (
+                    <div key={loc} style={{ marginBottom: "18px", paddingBottom: "18px", borderBottom: "1px solid #f0e0e0" }}>
+                        <div style={{ fontSize: "13px", fontWeight: "700", color: BK, marginBottom: "10px" }}>{loc}</div>
+                        <div style={{ display: "flex", gap: "12px" }}>
+                            {['staff', 'manager'].map(roleKey => {
+                                const codeKey = `${loc}-${roleKey}`;
+                                const codeVal = locationCodes[codeKey] || '—';
+                                return (
+                                    <div key={roleKey} style={{ flex: 1, padding: "12px", background: "#fafafa", border: "1px solid #eee", borderRadius: "8px" }}>
+                                        <div style={{ fontSize: "10px", textTransform: "uppercase", color: G, fontWeight: "700", letterSpacing: "0.1em", marginBottom: "6px" }}>
+                                            {roleKey.charAt(0).toUpperCase() + roleKey.slice(1)} Code
+                                        </div>
+                                        <div style={{ fontFamily: "monospace", fontSize: "18px", fontWeight: "800", letterSpacing: "0.15em", color: BK, marginBottom: "8px" }}>
+                                            {codeVal}
+                                        </div>
+                                        <button onClick={() => regenCode(codeKey)} disabled={codesSaving[codeKey]}
+                                            style={{ ...smBtn(), fontSize: "11px", opacity: codesSaving[codeKey] ? 0.6 : 1 }}>
+                                            {codesSaving[codeKey] ? "Saving…" : codesSaved[codeKey] ? "✓ Saved" : "Regenerate"}
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "4px", paddingTop: "20px" }}>
-                        <button
-                            onClick={async () => {
-                                if (!inviteCodeInput.trim()) return;
-                                setInviteCodeSaving(true);
-                                await saveSetting('inviteCode', inviteCodeInput.trim().toUpperCase());
-                                setInviteCode(inviteCodeInput.trim().toUpperCase());
-                                setInviteCodeInput(inviteCodeInput.trim().toUpperCase());
-                                setInviteCodeSaving(false);
-                                setInviteCodeSaved(true);
-                            }}
-                            disabled={inviteCodeSaving}
-                            style={{ ...gbtn, padding: "8px 18px", fontSize: "13px", opacity: inviteCodeSaving ? 0.6 : 1 }}>
-                            {inviteCodeSaving ? "Saving…" : "Update Code"}
+                ))}
+                <div>
+                    <div style={{ fontSize: "13px", fontWeight: "700", color: BK, marginBottom: "10px" }}>Owner</div>
+                    <div style={{ padding: "12px", background: "#fafafa", border: "1px solid #eee", borderRadius: "8px", display: "inline-block", minWidth: "200px" }}>
+                        <div style={{ fontSize: "10px", textTransform: "uppercase", color: G, fontWeight: "700", letterSpacing: "0.1em", marginBottom: "6px" }}>Owner Code</div>
+                        <div style={{ fontFamily: "monospace", fontSize: "18px", fontWeight: "800", letterSpacing: "0.15em", color: BK, marginBottom: "8px" }}>
+                            {locationCodes['owner'] || '—'}
+                        </div>
+                        <button onClick={() => regenCode('owner')} disabled={codesSaving['owner']}
+                            style={{ ...smBtn(), fontSize: "11px", opacity: codesSaving['owner'] ? 0.6 : 1 }}>
+                            {codesSaving['owner'] ? "Saving…" : codesSaved['owner'] ? "✓ Saved" : "Regenerate"}
                         </button>
-                        {inviteCodeSaved && <span style={{ fontSize: "11px", color: "#16a34a", fontWeight: "600" }}>✓ Saved</span>}
                     </div>
-                </div>
-                <div style={{ marginTop: "10px", fontSize: "12px", color: "#888" }}>
-                    Current code: <strong style={{ color: BK, letterSpacing: "0.08em" }}>{inviteCode}</strong>
                 </div>
             </Card>
 
