@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { Card, sh, ghos } from './ui';
 import { RepsTable } from './RepsTable';
 import { G, BK, WH } from '../constants';
+
+const thStyle = { padding: "11px 14px", textAlign: "left", fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: G, fontWeight: "700", whiteSpace: "nowrap" };
 
 const LOCATIONS = [
     { name: "Richardson", address: "888 S Greenville Ave Suite 220, Richardson, TX 75081" },
@@ -32,6 +35,38 @@ function buildActivity(comps, tasks) {
 
 const TIME_COLOR = { Opening: "#1d4ed8", "Mid-Day": "#92400e", Closing: "#6b21a8" };
 const TIME_BG = { Opening: "#dbeafe", "Mid-Day": "#fef3c7", Closing: "#f3e8ff" };
+
+function ActivityRow({ name, items, date, isLast }) {
+    const [open, setOpen] = useState(false);
+    return (
+        <>
+            <tr style={{ borderBottom: !isLast || open ? "1px solid #f5e8e8" : "none" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#fdf5f5"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <td style={{ padding: "12px 14px", fontSize: "14px", color: BK, fontWeight: "600" }}>{name}</td>
+                <td style={{ padding: "12px 14px", fontSize: "13px", color: "#555" }}>{date}</td>
+                <td style={{ padding: "12px 14px", fontSize: "13px", color: G, fontWeight: "700" }}>{items.length} task{items.length !== 1 ? "s" : ""}</td>
+                <td style={{ padding: "12px 14px" }}>
+                    <button onClick={() => setOpen(o => !o)} style={{ background: G, border: "none", borderRadius: "6px", color: WH, fontSize: "11px", padding: "5px 12px", cursor: "pointer", fontWeight: "700", fontFamily: "system-ui,sans-serif" }}>
+                        {open ? "Hide ▲" : "View ▼"}
+                    </button>
+                </td>
+            </tr>
+            {open && (
+                <tr style={{ borderBottom: !isLast ? "1px solid #f5e8e8" : "none", background: "#fafafa" }}>
+                    <td colSpan={4} style={{ padding: "10px 18px 14px" }}>
+                        {items.map((item, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 0", borderBottom: i < items.length - 1 ? "1px solid #f0f0f0" : "none" }}>
+                                <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "8px", background: TIME_BG[item.time] || "#f0f0f0", color: TIME_COLOR[item.time] || "#555", fontWeight: "700", flexShrink: 0 }}>{item.time}</span>
+                                <span style={{ fontSize: "13px", color: "#333" }}>{item.label}</span>
+                            </div>
+                        ))}
+                    </td>
+                </tr>
+            )}
+        </>
+    );
+}
 
 export function DashView({ reports, setView, setSelReport, hasletAddress, user, dailyTasks, todayCompletions, canViewReports, locationComps }) {
 
@@ -136,78 +171,75 @@ export function DashView({ reports, setView, setSelReport, hasletAddress, user, 
             {user?.role === 'Owner' ? (
                 ['Richardson', 'Fort Worth', 'Haslet'].map(loc => {
                     const locTasks = dailyTasks?.filter(t => t.location === loc) || [];
+                    const locTaskIds = new Set(locTasks.map(t => String(t.id)));
                     const locComps = locationComps?.[loc] || {};
-                    const done = Object.values(locComps).filter(Boolean).length;
+                    const done = Object.entries(locComps).filter(([id, v]) => v && locTaskIds.has(id)).length;
                     const total = locTasks.length;
                     const pct = total > 0 ? Math.round((done / total) * 100) : 0;
                     const activity = buildActivity(locComps, locTasks);
                     const entries = Object.entries(activity);
                     return (
-                        <Card key={loc} style={{ marginBottom: "12px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                                <span style={{ fontSize: "13px", fontWeight: "700", color: BK }}>{loc}</span>
-                                <span style={{ fontSize: "12px", fontWeight: "700", color: pct === 100 ? "#166534" : G }}>{done}/{total} — {pct}%</span>
+                        <div key={loc} style={{ marginBottom: "20px" }}>
+                            <div style={{ fontSize: "13px", fontWeight: "700", color: BK, marginBottom: "8px", display: "flex", justifyContent: "space-between" }}>
+                                <span>{loc}</span>
+                                <span style={{ color: pct === 100 ? "#166534" : G }}>{done}/{total} — {pct}%</span>
                             </div>
-                            {entries.length === 0
-                                ? <div style={{ fontSize: "12px", color: "#aaa", fontStyle: "italic" }}>No activity yet today</div>
-                                : entries.map(([name, items]) => (
-                                    <div key={name} style={{ marginBottom: "10px" }}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "5px" }}>
-                                            <span style={{ fontSize: "13px", fontWeight: "700", color: BK }}>{name}</span>
-                                            <span style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "12px", background: "#e8f5f0", color: G, fontWeight: "700" }}>{items.length} task{items.length !== 1 ? "s" : ""}</span>
-                                        </div>
-                                        <div style={{ paddingLeft: "4px" }}>
-                                            {items.map((item, i) => (
-                                                <div key={i} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" }}>
-                                                    <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "8px", background: TIME_BG[item.time] || "#f0f0f0", color: TIME_COLOR[item.time] || "#555", fontWeight: "700", flexShrink: 0 }}>{item.time}</span>
-                                                    <span style={{ fontSize: "12px", color: "#333" }}>{item.label}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))
-                            }
-                        </Card>
+                            <Card style={{ padding: 0, overflow: "hidden" }}>
+                                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                    <thead>
+                                        <tr style={{ borderBottom: "2px solid #f0e0e0", background: "#fdf5f5" }}>
+                                            <th style={thStyle}>Name</th>
+                                            <th style={thStyle}>Date</th>
+                                            <th style={thStyle}>Tasks Done</th>
+                                            <th style={thStyle}></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {entries.length === 0
+                                            ? <tr><td colSpan={4} style={{ padding: "24px", textAlign: "center", color: "#bbb", fontSize: "13px", fontStyle: "italic" }}>No activity yet today</td></tr>
+                                            : entries.map(([name, items], i) => (
+                                                <ActivityRow key={name} name={name} items={items} date={new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} isLast={i === entries.length - 1} />
+                                            ))
+                                        }
+                                    </tbody>
+                                </table>
+                            </Card>
+                        </div>
                     );
                 })
-            ) : (
-                <Card>
-                    {(() => {
-                        const done = Object.values(todayCompletions || {}).filter(Boolean).length;
-                        const total = dailyTasks?.length || 0;
-                        const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-                        const activity = buildActivity(todayCompletions, dailyTasks);
-                        const entries = Object.entries(activity);
-                        return (
-                            <>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                                    <span style={{ fontSize: "13px", fontWeight: "600", color: BK }}>Daily Task Completion</span>
-                                    <span style={{ fontSize: "13px", fontWeight: "700", color: pct === 100 ? "#166534" : G }}>{done}/{total} — {pct}%</span>
-                                </div>
-                                {entries.length === 0
-                                    ? <div style={{ fontSize: "12px", color: "#aaa", fontStyle: "italic" }}>No activity yet today</div>
-                                    : entries.map(([name, items]) => (
-                                        <div key={name} style={{ marginBottom: "12px" }}>
-                                            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "5px" }}>
-                                                <span style={{ fontSize: "13px", fontWeight: "700", color: BK }}>{name}</span>
-                                                <span style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "12px", background: "#e8f5f0", color: G, fontWeight: "700" }}>{items.length} task{items.length !== 1 ? "s" : ""}</span>
-                                            </div>
-                                            <div style={{ paddingLeft: "4px" }}>
-                                                {items.map((item, i) => (
-                                                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" }}>
-                                                        <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "8px", background: TIME_BG[item.time] || "#f0f0f0", color: TIME_COLOR[item.time] || "#555", fontWeight: "700", flexShrink: 0 }}>{item.time}</span>
-                                                        <span style={{ fontSize: "12px", color: "#333" }}>{item.label}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))
-                                }
-                            </>
-                        );
-                    })()}
-                </Card>
-            )}
+            ) : (() => {
+                const taskIds = new Set((dailyTasks || []).map(t => String(t.id)));
+                const done = Object.entries(todayCompletions || {}).filter(([id, v]) => v && taskIds.has(id)).length;
+                const total = taskIds.size;
+                const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                const activity = buildActivity(todayCompletions, dailyTasks);
+                const entries = Object.entries(activity);
+                return (
+                    <>
+                        <div style={{ fontSize: "13px", fontWeight: "700", color: pct === 100 ? "#166534" : G, marginBottom: "8px", textAlign: "right" }}>{done}/{total} — {pct}%</div>
+                        <Card style={{ padding: 0, overflow: "hidden" }}>
+                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                <thead>
+                                    <tr style={{ borderBottom: "2px solid #f0e0e0", background: "#fdf5f5" }}>
+                                        <th style={thStyle}>Name</th>
+                                        <th style={thStyle}>Date</th>
+                                        <th style={thStyle}>Tasks Done</th>
+                                        <th style={thStyle}></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {entries.length === 0
+                                        ? <tr><td colSpan={4} style={{ padding: "24px", textAlign: "center", color: "#bbb", fontSize: "13px", fontStyle: "italic" }}>No activity yet today</td></tr>
+                                        : entries.map(([name, items], i) => (
+                                            <ActivityRow key={name} name={name} items={items} date={new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} isLast={i === entries.length - 1} />
+                                        ))
+                                    }
+                                </tbody>
+                            </table>
+                        </Card>
+                    </>
+                );
+            })()}
         </div>
     );
 }

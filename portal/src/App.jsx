@@ -11,11 +11,12 @@ import { DailyView } from './components/DailyView';
 import { SettingsView } from './components/SettingsView';
 import { LOGO, PINK, G, BK, WH, DEF_INSP_CATS, DEF_TEMP, DEF_APPL, DEF_TASKS } from './constants';
 import { gbtn } from './components/ui';
-import { fetchReports, fetchReportsByLocation, saveReport, fetchDailyTasks, fetchDailyTasksByLocation, saveDailyTask, deleteDailyTask, fetchCompletions, saveCompletions, fetchSettings, saveSetting, fetchUserProfile } from './db';
+import { fetchReports, fetchReportsByLocation, saveReport, fetchDailyTasks, fetchDailyTasksByLocation, saveDailyTask, deleteDailyTask, fetchCompletions, saveCompletions, fetchSettings, saveSetting, fetchUserProfile, saveUserProfile } from './db';
 
 function normalizeRole(r) {
     if (!r) return r;
-    return r.charAt(0).toUpperCase() + r.slice(1).toLowerCase();
+    const t = r.trim();
+    return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
 }
 
 export default function App() {
@@ -55,8 +56,13 @@ export default function App() {
                 try {
                     const profile = await fetchUserProfile(firebaseUser.uid);
                     if (profile) {
+                        const fixedRole = normalizeRole(profile.role);
+                        console.log('[Auth] Profile loaded — role stored:', profile.role, '→ normalized:', fixedRole, '| location:', profile.location);
+                        if (fixedRole !== profile.role) {
+                            saveUserProfile(firebaseUser.uid, { ...profile, role: fixedRole }).catch(console.error);
+                        }
                         isUserSetRef.current = true;
-                        setUser({ uid: firebaseUser.uid, email: firebaseUser.email, ...profile, role: normalizeRole(profile.role) });
+                        setUser({ uid: firebaseUser.uid, email: firebaseUser.email, ...profile, role: fixedRole });
                     }
                 } catch (e) {
                     console.error("Error restoring session:", e);
