@@ -143,7 +143,7 @@ export function LoginPage({ onLogin }) {
                 <div style={{ textAlign: "center", marginBottom: "28px" }}>
                     <img src={LOGO} alt="One Bite" style={{ width: "90px", height: "90px", borderRadius: "50%", objectFit: "cover", marginBottom: "12px", boxShadow: `0 8px 24px rgba(0,138,95,0.3)` }} />
                     <div style={{ fontSize: "11px", letterSpacing: "0.25em", color: G, textTransform: "uppercase", fontWeight: "700", marginBottom: "2px" }}>Staff Portal</div>
-                    <h1 style={{ fontSize: "20px", fontWeight: "800", color: G, margin: 0 }}>Inspection Command</h1>
+
                     <p style={{ fontSize: "13px", color: "#888", margin: "3px 0 0" }}>Mini Pitas & Juice Bar</p>
                 </div>
 

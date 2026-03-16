@@ -4,7 +4,9 @@
       "Bash(npm run dev -- --host)",
       "Bash(npm run dev)",
       "Bash(npx firebase-tools deploy --only firestore:rules --project one-bite-inspectionss)",
-      "Bash(npx firebase-tools login --reauth)"
+      "Bash(npx firebase-tools login --reauth)",
+      "Bash(npm install @emailjs/browser)",
+      "Bash(test -f \"c:\\\\Users\\\\celee\\\\onebite-inspection-website-1\\\\portal\\\\.env\")"
     ]
   }
 }
