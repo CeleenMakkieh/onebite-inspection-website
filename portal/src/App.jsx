@@ -337,20 +337,20 @@ export default function App() {
             )}
 
             <div style={{ marginLeft: isMobile ? 0 : (sidebarOpen ? "220px" : "0"), transition: "margin-left 0.25s ease", minHeight: "100vh" }}>
-                <div style={{ padding: "18px 32px", background: "rgba(246,209,209,0.92)", borderBottom: `1px solid rgba(0,138,95,0.15)`, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ padding: isMobile ? "12px 14px" : "18px 32px", background: "rgba(246,209,209,0.92)", borderBottom: `1px solid rgba(0,138,95,0.15)`, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
                         <button onClick={() => setSidebarOpen(o => !o)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 8px", color: G, fontSize: "22px", lineHeight: 1, borderRadius: "6px", flexShrink: 0, fontFamily: "system-ui,sans-serif" }}>
                             {sidebarOpen ? "✕" : "☰"}
                         </button>
-                        <div>
-                            <h1 style={{ margin: 0, fontSize: "22px", fontWeight: "800", color: G }}>{titles[view] || "—"}</h1>
-                            <div style={{ fontSize: "12px", color: BK, marginTop: "2px" }}>{new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div>
+                        <div style={{ minWidth: 0 }}>
+                            <h1 style={{ margin: 0, fontSize: isMobile ? "17px" : "22px", fontWeight: "800", color: G, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{titles[view] || "—"}</h1>
+                            {!isMobile && <div style={{ fontSize: "12px", color: BK, marginTop: "2px" }}>{new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div>}
                         </div>
                     </div>
                     {view === "dashboard" && canViewReports && <button onClick={startNew} style={gbtn}>＋ New Inspection</button>}
                 </div>
 
-                <div style={{ padding: "24px 32px" }}>
+                <div style={{ padding: isMobile ? "16px 14px" : "24px 32px" }}>
                     {needsLocation && (
                         <div style={{ marginBottom: "18px", padding: "12px 16px", background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: "8px", fontSize: "13px", color: "#92400e", fontWeight: "600" }}>
                             Your account has no location assigned. Contact the owner.
