@@ -18,7 +18,7 @@ function rangeLabel(min, max) {
     return null;
 }
 
-export function NewInspView({ inspection, setInspection, onSubmit, onCancel, inspCats, tempItems, appliances, tempRequired, appliancesRequired, user }) {
+export function NewInspView({ inspection, setInspection, onSubmit, onCancel, inspCats, tempItems, appliances, tempRequired, appliancesRequired, user, isMobile }) {
     const photoRef = useRef(null);
 
     useEffect(() => {
@@ -70,7 +70,7 @@ export function NewInspView({ inspection, setInspection, onSubmit, onCancel, ins
     return (
         <div style={{ maxWidth: "800px" }}>
             <Card style={{ marginBottom: "22px" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "14px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: "14px" }}>
                     <div>
                         <label style={lbl}>Date <span style={{ color: "#dc2626" }}>*</span></label>
                         <input type="date" value={inspection.date} onChange={e => upd("date", e.target.value)} style={{ ...inp, width: "100%" }} />
