@@ -40,6 +40,8 @@ export default function App() {
     const [dailyTasks, setDailyTasks] = useState(DEF_TASKS);
     const [completions, setCompletions] = useState({});
     const [locationComps, setLocationComps] = useState({});
+    const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
+    const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
 
     const todayKey = new Date().toISOString().split("T")[0];
 
@@ -136,6 +138,13 @@ export default function App() {
         if (!canAccess && view === "settings") setView("dashboard");
         if (!canView && (view === "reports" || view === "new" || view === "detail")) setView("dashboard");
     }, [user, view]);
+
+    // Responsive sidebar — update isMobile on resize
+    useEffect(() => {
+        const check = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', check);
+        return () => window.removeEventListener('resize', check);
+    }, []);
 
     // Called directly by LoginPage after successful sign-in / register
     const handleLogin = (u) => {
@@ -293,7 +302,7 @@ export default function App() {
 
     return (
         <div style={{ minHeight: "100vh", background: PINK, fontFamily: "system-ui,sans-serif", color: BK }}>
-            <div style={{ position: "fixed", left: 0, top: 0, bottom: 0, width: "220px", background: G, display: "flex", flexDirection: "column", zIndex: 100, boxShadow: "4px 0 16px rgba(0,0,0,0.12)" }}>
+            <div style={{ position: "fixed", left: 0, top: 0, bottom: 0, width: "220px", background: G, display: "flex", flexDirection: "column", zIndex: 100, boxShadow: "4px 0 16px rgba(0,0,0,0.12)", transform: sidebarOpen ? "translateX(0)" : "translateX(-220px)", transition: "transform 0.25s ease" }}>
                 <div style={{ padding: "20px 16px 16px", borderBottom: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", gap: "12px" }}>
                     <img src={LOGO} alt="One Bite" style={{ width: "44px", height: "44px", borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "2px solid rgba(255,255,255,0.4)" }} />
                     <div>
@@ -303,7 +312,7 @@ export default function App() {
                 </div>
                 <nav style={{ padding: "12px 10px", flex: 1 }}>
                     {nav.map(item => (
-                        <button key={item.id} onClick={() => item.id === "new" ? startNew() : setView(item.id)} style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", padding: "11px 14px", background: view === item.id ? "rgba(255,255,255,0.18)" : "transparent", border: "none", borderRadius: "8px", color: WH, fontSize: "14px", cursor: "pointer", textAlign: "left", marginBottom: "3px", fontFamily: "system-ui,sans-serif", fontWeight: view === item.id ? "700" : "400" }}>
+                        <button key={item.id} onClick={() => { if (item.id === "new") startNew(); else setView(item.id); if (isMobile) setSidebarOpen(false); }} style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", padding: "11px 14px", background: view === item.id ? "rgba(255,255,255,0.18)" : "transparent", border: "none", borderRadius: "8px", color: WH, fontSize: "14px", cursor: "pointer", textAlign: "left", marginBottom: "3px", fontFamily: "system-ui,sans-serif", fontWeight: view === item.id ? "700" : "400" }}>
                             <span style={{ fontSize: "16px", width: "20px", textAlign: "center" }}>{item.icon}</span>{item.label}
                         </button>
                     ))}
@@ -323,11 +332,20 @@ export default function App() {
                 </div>
             </div>
 
-            <div style={{ marginLeft: "220px", minHeight: "100vh" }}>
+            {sidebarOpen && isMobile && (
+                <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 99 }} />
+            )}
+
+            <div style={{ marginLeft: isMobile ? 0 : (sidebarOpen ? "220px" : "0"), transition: "margin-left 0.25s ease", minHeight: "100vh" }}>
                 <div style={{ padding: "18px 32px", background: "rgba(246,209,209,0.92)", borderBottom: `1px solid rgba(0,138,95,0.15)`, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
-                    <div>
-                        <h1 style={{ margin: 0, fontSize: "22px", fontWeight: "800", color: G }}>{titles[view] || "—"}</h1>
-                        <div style={{ fontSize: "12px", color: BK, marginTop: "2px" }}>{new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <button onClick={() => setSidebarOpen(o => !o)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 8px", color: G, fontSize: "22px", lineHeight: 1, borderRadius: "6px", flexShrink: 0, fontFamily: "system-ui,sans-serif" }}>
+                            {sidebarOpen ? "✕" : "☰"}
+                        </button>
+                        <div>
+                            <h1 style={{ margin: 0, fontSize: "22px", fontWeight: "800", color: G }}>{titles[view] || "—"}</h1>
+                            <div style={{ fontSize: "12px", color: BK, marginTop: "2px" }}>{new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div>
+                        </div>
                     </div>
                     {view === "dashboard" && canViewReports && <button onClick={startNew} style={gbtn}>＋ New Inspection</button>}
                 </div>
