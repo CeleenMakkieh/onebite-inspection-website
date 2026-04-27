@@ -1,4 +1,6 @@
-const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const SYSTEM_PROMPT = `You are a receipt data extraction assistant. The user has uploaded a photo or scan of a purchase receipt. Your job is to read every single line item on the receipt and return the data as JSON.
 
@@ -36,96 +38,39 @@ Important rules:
 - If the image is rotated or blurry, do your best and set confidence accordingly`;
 
 export async function scanReceiptImage(file) {
-    if (!ANTHROPIC_API_KEY) throw new Error('VITE_ANTHROPIC_API_KEY is not set in .env');
+    if (!GEMINI_API_KEY) throw new Error('VITE_GEMINI_API_KEY is not set in .env');
 
-    // PDFs use a separate document path
-    if (file.type === 'application/pdf') {
-        return scanPdf(file);
-    }
+    const mimeType = file.type === 'application/pdf' ? 'application/pdf' : 'image/jpeg';
+    const base64 = file.type === 'application/pdf'
+        ? await fileToBase64Raw(file)
+        : (await prepareImage(file)).base64;
 
-    // Resize and convert to JPEG for all image types
-    const { base64, mediaType } = await prepareImage(file);
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
         method: 'POST',
-        headers: {
-            'x-api-key': ANTHROPIC_API_KEY,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-            'content-type': 'application/json',
-        },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-            model: 'claude-sonnet-4-6',
-            max_tokens: 8192,
-            system: SYSTEM_PROMPT,
-            messages: [{
+            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            contents: [{
                 role: 'user',
-                content: [
-                    {
-                        type: 'image',
-                        source: { type: 'base64', media_type: mediaType, data: base64 }
-                    },
-                    {
-                        type: 'text',
-                        text: 'Read this receipt and extract every line item. Return all data as JSON.'
-                    }
+                parts: [
+                    { inline_data: { mime_type: mimeType, data: base64 } },
+                    { text: 'Read this receipt and extract every line item. Return all data as JSON.' }
                 ]
-            }]
+            }],
+            generationConfig: { maxOutputTokens: 8192, temperature: 0 }
         })
     });
 
     if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        console.error('Anthropic API error:', err);
+        console.error('Gemini API error:', err);
         throw new Error(err.error?.message || `API error ${response.status}`);
     }
 
     const data = await response.json();
-    const text = (data.content?.[0]?.text || '').trim();
+    const text = (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
     console.log('Raw AI response:', text.slice(0, 300));
 
-    return parseJson(text);
-}
-
-async function scanPdf(file) {
-    const base64 = await fileToBase64Raw(file);
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-            'x-api-key': ANTHROPIC_API_KEY,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-            'anthropic-beta': 'pdfs-2024-09-25',
-            'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-            model: 'claude-sonnet-4-6',
-            max_tokens: 8192,
-            system: SYSTEM_PROMPT,
-            messages: [{
-                role: 'user',
-                content: [
-                    {
-                        type: 'document',
-                        source: { type: 'base64', media_type: 'application/pdf', data: base64 }
-                    },
-                    {
-                        type: 'text',
-                        text: 'Read this receipt PDF and extract every line item. Return all data as JSON.'
-                    }
-                ]
-            }]
-        })
-    });
-
-    if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error?.message || `API error ${response.status}`);
-    }
-
-    const data = await response.json();
-    const text = (data.content?.[0]?.text || '').trim();
     return parseJson(text);
 }
 
@@ -137,7 +82,6 @@ async function prepareImage(file) {
     const url = URL.createObjectURL(file);
 
     try {
-        // createImageBitmap respects EXIF orientation on all modern mobile browsers
         const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image', resizeQuality: 'high' });
         URL.revokeObjectURL(url);
 
@@ -156,7 +100,6 @@ async function prepareImage(file) {
 
         return await canvasToBase64(canvas);
     } catch (_) {
-        // Fallback for browsers that don't support createImageBitmap options
         URL.revokeObjectURL(url);
         return fallbackPrepare(file, MAX);
     }
@@ -208,16 +151,13 @@ function fileToBase64Raw(file) {
 }
 
 function parseJson(text) {
-    // Direct parse
     try { return JSON.parse(text); } catch (_) {}
 
-    // Strip markdown code fences if the model wrapped it anyway
     const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (fenced) {
         try { return JSON.parse(fenced[1].trim()); } catch (_) {}
     }
 
-    // Extract first {...} block
     const block = text.match(/\{[\s\S]*\}/);
     if (block) {
         try { return JSON.parse(block[0]); } catch (_) {}
