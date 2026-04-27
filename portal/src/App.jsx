@@ -3,12 +3,14 @@ import emailjs from '@emailjs/browser';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from './firebase';
 import { LoginPage } from './components/LoginPage';
+import { PortalSelectPage } from './components/PortalSelectPage';
 import { DashView } from './components/DashView';
 import { RepsView } from './components/RepsView';
 import { DetailView } from './components/DetailView';
 import { NewInspView } from './components/NewInspView';
 import { DailyView } from './components/DailyView';
 import { SettingsView } from './components/SettingsView';
+import { ReceiptPortal } from './components/receipts/ReceiptPortal';
 import { LOGO, PINK, G, BK, WH, DEF_INSP_CATS, DEF_TEMP, DEF_APPL, DEF_TASKS } from './constants';
 import { gbtn } from './components/ui';
 import { fetchReports, fetchReportsByLocation, saveReport, fetchDailyTasks, fetchDailyTasksByLocation, saveDailyTask, deleteDailyTask, fetchCompletions, saveCompletions, fetchSettings, saveSetting, fetchUserProfile, saveUserProfile } from './db';
@@ -40,6 +42,7 @@ export default function App() {
     const [dailyTasks, setDailyTasks] = useState(DEF_TASKS);
     const [completions, setCompletions] = useState({});
     const [locationComps, setLocationComps] = useState({});
+    const [activePortal, setActivePortal] = useState(null); // null = not chosen yet, 'inspection', 'receipts'
     const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
 
@@ -150,6 +153,7 @@ export default function App() {
     const handleLogin = (u) => {
         isUserSetRef.current = true;
         setUser({ ...u, role: normalizeRole(u.role) });
+        setActivePortal(null); // always show portal select on fresh login
         setAuthLoading(false);
     };
 
@@ -162,6 +166,21 @@ export default function App() {
     }
 
     if (!user) return <LoginPage onLogin={handleLogin} />;
+
+    // Staff can only access inspection — skip portal selection
+    const canAccessReceipts = user.role === 'Owner' || user.role === 'Manager';
+    if (!activePortal) {
+        if (!canAccessReceipts) {
+            // Staff: auto-route to inspection, no choice
+            setActivePortal('inspection');
+            return null;
+        }
+        return <PortalSelectPage user={user} onSelect={setActivePortal} />;
+    }
+
+    if (activePortal === 'receipts') {
+        return <ReceiptPortal user={user} onSwitchPortal={() => setActivePortal(null)} />;
+    }
 
     // ── Settings setters (persist to Firebase) ──
     const updateInspCats = async (newCats) => {
@@ -317,8 +336,16 @@ export default function App() {
                         </button>
                     ))}
                 </nav>
-                <div style={{ padding: "14px", borderTop: "1px solid rgba(255,255,255,0.15)" }}>
-                    <div style={{ padding: "10px 12px", background: "rgba(255,255,255,0.12)", borderRadius: "8px", marginBottom: "10px" }}>
+                <div style={{ padding: "14px", borderTop: "1px solid rgba(255,255,255,0.15)", display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {canAccessReceipts && (
+                        <button
+                            onClick={() => setActivePortal(null)}
+                            style={{ width: "100%", padding: "9px", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "8px", color: WH, fontSize: "12px", cursor: "pointer", fontFamily: "system-ui,sans-serif", textTransform: "uppercase", letterSpacing: "0.08em" }}
+                            onMouseEnter={e => e.target.style.background = "rgba(255,255,255,0.22)"}
+                            onMouseLeave={e => e.target.style.background = "rgba(255,255,255,0.12)"}
+                        >⇄ Switch Portal</button>
+                    )}
+                    <div style={{ padding: "10px 12px", background: "rgba(255,255,255,0.12)", borderRadius: "8px" }}>
                         <div style={{ fontSize: "13px", color: WH, fontWeight: "700" }}>{user.name}</div>
                         <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.1em" }}>{user.role}</div>
                         {user.location && <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.55)", marginTop: "2px" }}>{user.location}</div>}
