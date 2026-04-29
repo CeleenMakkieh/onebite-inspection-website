@@ -152,7 +152,7 @@ export function ReceiptPortal({ user, onSwitchPortal }) {
                                         )}
                                         <span style={{ fontSize: '12px', color: '#aaa', marginLeft: 'auto' }}>{filteredReceipts.length} receipt{filteredReceipts.length !== 1 ? 's' : ''}</span>
                                     </div>
-                                    <div style={{ background: WH, borderRadius: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.07)', overflow: 'hidden' }}>
+                                    <div style={{ background: WH, borderRadius: '16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
                                         {filteredReceipts.length === 0 ? (
                                             <div style={{ padding: '40px', textAlign: 'center', fontSize: '13px', color: '#aaa' }}>No receipts found. <button onClick={() => setView('upload')} style={{ background: 'none', border: 'none', color: G, fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', textDecoration: 'underline' }}>Upload one</button></div>
                                         ) : filteredReceipts.map((r, i) => (
@@ -161,10 +161,12 @@ export function ReceiptPortal({ user, onSwitchPortal }) {
                                                 onMouseEnter={e => e.currentTarget.style.background = '#f6f9f7'}
                                                 onMouseLeave={e => e.currentTarget.style.background = WH}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                                                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(0,138,95,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', color: G, flexShrink: 0, letterSpacing: '-0.5px' }}>REC</div>
+                                                    <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'rgba(0,138,95,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                        <span style={{ fontSize: '16px', fontWeight: '900', color: G }}>{(r.vendor || '?').charAt(0).toUpperCase()}</span>
+                                                    </div>
                                                     <div>
                                                         <div style={{ fontSize: '14px', fontWeight: '700', color: BK }}>{r.vendor}</div>
-                                                        <div style={{ fontSize: '11px', color: '#aaa' }}>{r.date} · {r.location} · {r.itemCount ?? '?'} items · by {r.uploadedBy}</div>
+                                                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>{r.date}{r.location ? ` · ${r.location}` : ''} · {r.itemCount ?? '?'} items · {r.uploadedBy}</div>
                                                     </div>
                                                 </div>
                                                 <div style={{ fontSize: '16px', fontWeight: '800', color: G, flexShrink: 0 }}>${(parseFloat(r.total) || 0).toFixed(2)}</div>
