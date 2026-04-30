@@ -1,8 +1,7 @@
 [build]
-  base = "portal"
-  command = "npm run build"
-  publish = "dist"
+  command = "cd portal && npm run build"
+  publish = "portal/dist"
 
 [functions]
-  directory = "netlify/functions"
+  directory = "portal/netlify/functions"
   node_bundler = "esbuild"
