@@ -1,90 +1,109 @@
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-1.5-flash-latest';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-
-const SYSTEM_PROMPT = `You are a receipt data extraction assistant. The user has uploaded a photo or scan of a purchase receipt. Your job is to read every single line item on the receipt and return the data as JSON.
-
-Return ONLY valid JSON — no markdown fences, no explanation, no extra text. Start your response with { and end with }.
-
-Use this exact structure:
-{
-  "vendor": "store or vendor name",
-  "date": "YYYY-MM-DD or empty string",
-  "receiptNumber": "receipt or invoice number, or empty string",
-  "items": [
-    {
-      "name": "full item description exactly as written on receipt",
-      "quantity": 1,
-      "unit": "ea",
-      "unitPrice": 0.00,
-      "lineTotal": 0.00,
-      "confidence": 1
-    }
-  ],
-  "subtotal": 0.00,
-  "tax": 0.00,
-  "total": 0.00
-}
-
-Important rules:
-- Read EVERY line item — do not skip any, even if the receipt is long
-- Copy the item name exactly as printed, including product codes or abbreviations
-- quantity: the number of units purchased (default 1 if not shown)
-- unit: "ea", "lb", "oz", "case", "bag", "box", "gal", "pkg", or whatever appears
-- unitPrice: price per unit. If not shown separately, divide lineTotal by quantity
-- lineTotal: the total dollar amount for that line
-- confidence: 1 = clearly readable, 0.5 = partially unclear or blurry, 0 = could not read
-- Use 0 for any number that is missing, and "" for any string that is missing
-- If the image is rotated or blurry, do your best and set confidence accordingly`;
+const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
 
 export async function scanReceiptImage(file) {
-    if (!GEMINI_API_KEY) throw new Error('VITE_GEMINI_API_KEY is not set in .env');
+    const isPdf = file.type === 'application/pdf';
+    const base64 = isPdf ? await fileToBase64Raw(file) : (await prepareImage(file)).base64;
+    const fileName = file.name || (isPdf ? 'receipt.pdf' : 'receipt.jpg');
 
-    const mimeType = file.type === 'application/pdf' ? 'application/pdf' : 'image/jpeg';
-    const base64 = file.type === 'application/pdf'
-        ? await fileToBase64Raw(file)
-        : (await prepareImage(file)).base64;
+    // Step 1: Veryfi OCR via Netlify serverless function
+    const veryfiData = await callVeryfi(base64, fileName);
 
-    const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-            contents: [{
-                role: 'user',
-                parts: [
-                    { inline_data: { mime_type: mimeType, data: base64 } },
-                    { text: 'Read this receipt and extract every line item. Return all data as JSON.' }
-                ]
-            }],
-            generationConfig: { maxOutputTokens: 8192, temperature: 0 }
-        })
-    });
+    // Step 2: Map Veryfi response to app schema
+    const receipt = mapVeryfiToSchema(veryfiData);
 
-    if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        console.error('Gemini API error:', err);
-        throw new Error(err.error?.message || `API error ${response.status}`);
+    // Step 3: Clean abbreviated item names with Claude (falls back to raw names if unavailable)
+    if (ANTHROPIC_API_KEY && receipt.items.length > 0) {
+        receipt.items = await cleanItemNames(receipt.items);
     }
 
-    const data = await response.json();
-    const text = (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-    console.log('Raw AI response:', text.slice(0, 300));
-
-    return parseJson(text);
+    return receipt;
 }
 
-// Resize image to max 1600px and convert to JPEG.
-// Uses createImageBitmap with imageOrientation:'from-image' to auto-correct
-// EXIF rotation — critical for mobile gallery photos that are stored sideways.
+async function callVeryfi(fileData, fileName) {
+    const res = await fetch('/.netlify/functions/scan-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileData, fileName }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+        const msg = data?.error || data?.message || `Veryfi error ${res.status}`;
+        throw new Error(msg);
+    }
+
+    return data;
+}
+
+function mapVeryfiToSchema(data) {
+    const items = (data.line_items || [])
+        .map(it => ({
+            name: it.description || it.name || '',
+            quantity: parseFloat(it.quantity) || 1,
+            unit: it.unit_of_measure || 'ea',
+            unitPrice: parseFloat(it.unit_price) || 0,
+            lineTotal: parseFloat(it.total) || 0,
+            confidence: 1,
+        }))
+        .filter(it => it.name.trim());
+
+    return {
+        vendor: data.vendor?.name || (typeof data.vendor === 'string' ? data.vendor : '') || '',
+        date: data.date || '',
+        receiptNumber: data.invoice_number || data.receipt_number || '',
+        items,
+        subtotal: parseFloat(data.subtotal) || 0,
+        tax: parseFloat(data.tax) || 0,
+        total: parseFloat(data.total) || 0,
+    };
+}
+
+async function cleanItemNames(items) {
+    const names = items.map(it => it.name);
+
+    try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'x-api-key': ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01',
+                'anthropic-dangerous-direct-browser-access': 'true',
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: 'claude-haiku-4-5-20251001',
+                max_tokens: 1024,
+                messages: [{
+                    role: 'user',
+                    content: `These are item names from a restaurant supply receipt OCR scan. Many have abbreviations, codes, or are truncated. Clean each name to be human-readable: expand abbreviations, fix truncations, remove item codes. Keep the food/product identity accurate. Return ONLY a JSON array of cleaned name strings in the same order. No other text.\n\n${JSON.stringify(names)}`
+                }]
+            })
+        });
+
+        if (!response.ok) return items;
+
+        const data = await response.json();
+        const text = (data.content?.[0]?.text || '').trim();
+
+        const match = text.match(/\[[\s\S]*\]/);
+        if (match) {
+            const cleaned = JSON.parse(match[0]);
+            if (Array.isArray(cleaned) && cleaned.length === items.length) {
+                return items.map((it, i) => ({ ...it, name: cleaned[i] || it.name }));
+            }
+        }
+    } catch (_) {}
+
+    return items;
+}
+
+// Resize image to max 1600px and auto-correct EXIF rotation for mobile photos
 async function prepareImage(file) {
     const MAX = 1600;
-    const url = URL.createObjectURL(file);
 
     try {
         const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image', resizeQuality: 'high' });
-        URL.revokeObjectURL(url);
-
         const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height));
         const w = Math.round(bitmap.width * scale);
         const h = Math.round(bitmap.height * scale);
@@ -98,9 +117,8 @@ async function prepareImage(file) {
         ctx.drawImage(bitmap, 0, 0, w, h);
         bitmap.close();
 
-        return await canvasToBase64(canvas);
+        return canvasToBase64(canvas);
     } catch (_) {
-        URL.revokeObjectURL(url);
         return fallbackPrepare(file, MAX);
     }
 }
@@ -148,21 +166,4 @@ function fileToBase64Raw(file) {
         reader.onerror = reject;
         reader.readAsDataURL(file);
     });
-}
-
-function parseJson(text) {
-    try { return JSON.parse(text); } catch (_) {}
-
-    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenced) {
-        try { return JSON.parse(fenced[1].trim()); } catch (_) {}
-    }
-
-    const block = text.match(/\{[\s\S]*\}/);
-    if (block) {
-        try { return JSON.parse(block[0]); } catch (_) {}
-    }
-
-    console.error('Could not parse AI response:', text);
-    throw new Error('Could not read the receipt. Make sure the photo is clear and try again.');
 }
