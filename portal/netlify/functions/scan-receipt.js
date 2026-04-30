@@ -36,7 +36,17 @@ exports.handler = async (event) => {
             }),
         });
 
-        const data = await veryfiRes.json();
+        const rawText = await veryfiRes.text();
+        let data;
+        try {
+            data = JSON.parse(rawText);
+        } catch (_) {
+            return {
+                statusCode: 502,
+                headers: { ...CORS, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: `Veryfi returned non-JSON (status ${veryfiRes.status}): ${rawText.slice(0, 300)}` }),
+            };
+        }
         return {
             statusCode: veryfiRes.status,
             headers: { ...CORS, 'Content-Type': 'application/json' },

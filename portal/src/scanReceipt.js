@@ -26,7 +26,13 @@ async function callVeryfi(fileData, fileName) {
         body: JSON.stringify({ fileData, fileName }),
     });
 
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try {
+        data = JSON.parse(text);
+    } catch (_) {
+        throw new Error(`Server returned an unreadable response (status ${res.status}). The image may be too large — try a smaller photo.`);
+    }
 
     if (!res.ok) {
         const msg = data?.error || data?.message || `Veryfi error ${res.status}`;
