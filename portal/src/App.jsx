@@ -179,6 +179,7 @@ export default function App() {
     }
 
     if (activePortal === 'receipts') {
+        if (!canAccessReceipts) { setActivePortal('inspection'); return null; }
         return <ReceiptPortal user={user} onSwitchPortal={() => setActivePortal(null)} />;
     }
 

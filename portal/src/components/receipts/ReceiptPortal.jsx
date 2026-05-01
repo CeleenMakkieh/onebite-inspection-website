@@ -133,7 +133,7 @@ export function ReceiptPortal({ user, onSwitchPortal }) {
                         <div style={{ fontSize: '14px', color: '#aaa', padding: '40px' }}>Loading receipts…</div>
                     ) : (
                         <>
-                            {view === 'dashboard' && <ReceiptDash receipts={receipts} onUpload={() => setView('upload')} onViewAll={() => setView('all')} setSelReceipt={setSelReceipt} setView={setView} />}
+                            {view === 'dashboard' && <ReceiptDash receipts={receipts} user={user} onUpload={() => setView('upload')} onViewAll={() => setView('all')} setSelReceipt={setSelReceipt} setView={setView} />}
                             {view === 'upload' && <ReceiptUpload user={user} onSaved={handleSaved} />}
                             {view === 'detail' && selReceipt && <ReceiptDetail receipt={selReceipt} onBack={() => setView('all')} onDeleted={handleDeleted} />}
                             {view === 'reports' && <ReceiptReports receipts={receipts} />}

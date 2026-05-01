@@ -1,17 +1,14 @@
 import { useState, useEffect } from 'react';
 import { G, WH, BK } from '../../constants';
-import { fetchReceiptItems } from '../../receiptDb';
+import { fetchReceiptItems, fetchBudgets, saveBudget } from '../../receiptDb';
 
+const SHADOW = '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06)';
 const PINK_LIGHT = 'rgba(0,138,95,0.07)';
+const RED = '#dc2626';
 
 function StatCard({ label, value, accent, sub }) {
     return (
-        <div style={{
-            background: WH, borderRadius: '16px', padding: '22px 24px',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06)',
-            flex: '1', minWidth: '150px', borderTop: `4px solid ${accent || '#e2e8f0'}`,
-            display: 'flex', flexDirection: 'column', gap: '6px'
-        }}>
+        <div style={{ background: WH, borderRadius: '16px', padding: '22px 24px', boxShadow: SHADOW, flex: '1', minWidth: '150px', borderTop: `4px solid ${accent || '#e2e8f0'}`, display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
             <div style={{ fontSize: '28px', fontWeight: '900', color: BK, letterSpacing: '-0.02em', lineHeight: 1 }}>{value}</div>
             {sub && <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{sub}</div>}
@@ -19,9 +16,20 @@ function StatCard({ label, value, accent, sub }) {
     );
 }
 
-export function ReceiptDash({ receipts, onUpload, onViewAll, setSelReceipt, setView }) {
+export function ReceiptDash({ receipts, user, onUpload, onViewAll, setSelReceipt, setView }) {
     const [topItems, setTopItems] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [budgets, setBudgets] = useState({});
+    const [editingLoc, setEditingLoc] = useState(null);
+    const [editVal, setEditVal] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    const isOwner = user?.role === 'Owner';
+    const isManager = user?.role === 'Manager';
+    const canEditBudget = isOwner || isManager;
+
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    const monthLabel = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
 
     useEffect(() => {
         async function load() {
@@ -42,10 +50,25 @@ export function ReceiptDash({ receipts, onUpload, onViewAll, setSelReceipt, setV
         else setLoading(false);
     }, [receipts]);
 
+    useEffect(() => {
+        fetchBudgets().then(setBudgets);
+    }, []);
+
     const totalSpend = receipts.reduce((s, r) => s + (parseFloat(r.total) || 0), 0);
-    const thisMonth = new Date().toISOString().slice(0, 7);
     const monthReceipts = receipts.filter(r => r.date?.startsWith(thisMonth));
     const monthSpend = monthReceipts.reduce((s, r) => s + (parseFloat(r.total) || 0), 0);
+
+    // Per-location spending this month
+    const locationSpend = monthReceipts.reduce((acc, r) => {
+        const loc = r.location || 'Unknown';
+        acc[loc] = (acc[loc] || 0) + (parseFloat(r.total) || 0);
+        return acc;
+    }, {});
+
+    // Locations to show in budget section
+    const budgetLocations = isOwner
+        ? [...new Set([...Object.keys(locationSpend), ...Object.keys(budgets)])]
+        : isManager && user.location ? [user.location] : [];
 
     const vendorTotals = Object.values(
         receipts.reduce((acc, r) => {
@@ -60,24 +83,106 @@ export function ReceiptDash({ receipts, onUpload, onViewAll, setSelReceipt, setV
     const topItem = topItems[0] || null;
     const maxVendor = vendorTotals[0]?.total || 1;
 
+    const handleEditBudget = (loc) => {
+        setEditingLoc(loc);
+        setEditVal(budgets[loc] ? String(budgets[loc]) : '');
+    };
+
+    const handleSaveBudget = async (loc) => {
+        const amt = parseFloat(editVal);
+        if (isNaN(amt) || amt < 0) { setEditingLoc(null); return; }
+        setSaving(true);
+        await saveBudget(loc, amt);
+        setBudgets(prev => ({ ...prev, [loc]: amt }));
+        setSaving(false);
+        setEditingLoc(null);
+    };
+
     return (
         <div style={{ maxWidth: '960px' }}>
 
             {/* Stat cards */}
             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '28px' }}>
                 <StatCard label="Total Receipts" value={receipts.length} accent="#cbd5e1" sub={`${monthReceipts.length} this month`} />
-                <StatCard label="This Month" value={`$${monthSpend.toFixed(2)}`} accent={G} sub={new Date().toLocaleString('default', { month: 'long', year: 'numeric' })} />
+                <StatCard label="This Month" value={`$${monthSpend.toFixed(2)}`} accent={G} sub={monthLabel} />
                 <StatCard label="All-Time Spend" value={`$${totalSpend.toFixed(2)}`} accent={G} sub={`across ${receipts.length} receipt${receipts.length !== 1 ? 's' : ''}`} />
                 {!loading && topItem && (
                     <StatCard label="Top Item" value={topItem.name} accent="#f59e0b" sub={`$${topItem.totalSpend.toFixed(2)} total · ${topItem.count}x purchased`} />
                 )}
             </div>
 
+            {/* Monthly Budget Section */}
+            {canEditBudget && budgetLocations.length > 0 && (
+                <div style={{ background: WH, borderRadius: '16px', boxShadow: SHADOW, overflow: 'hidden', marginBottom: '28px' }}>
+                    <div style={{ padding: '18px 22px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                            <div style={{ fontSize: '13px', fontWeight: '800', color: BK, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Monthly Budget — {monthLabel}</div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Click a budget to edit</div>
+                        </div>
+                    </div>
+                    <div style={{ padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        {budgetLocations.map(loc => {
+                            const spent = locationSpend[loc] || 0;
+                            const budget = budgets[loc] || 0;
+                            const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
+                            const over = budget > 0 && spent > budget;
+                            const isEditing = editingLoc === loc;
+
+                            return (
+                                <div key={loc}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <span style={{ fontSize: '14px', fontWeight: '800', color: BK }}>{loc}</span>
+                                            {over && (
+                                                <span style={{ padding: '3px 10px', background: '#fee2e2', borderRadius: '99px', fontSize: '11px', fontWeight: '800', color: RED }}>Over Budget</span>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span style={{ fontSize: '14px', fontWeight: '800', color: over ? RED : G }}>${spent.toFixed(2)}</span>
+                                            {budget > 0 && <span style={{ fontSize: '13px', color: '#94a3b8' }}>/ </span>}
+                                            {isEditing ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <span style={{ fontSize: '13px', color: '#94a3b8' }}>$</span>
+                                                    <input
+                                                        autoFocus
+                                                        type="number"
+                                                        value={editVal}
+                                                        onChange={e => setEditVal(e.target.value)}
+                                                        onKeyDown={e => { if (e.key === 'Enter') handleSaveBudget(loc); if (e.key === 'Escape') setEditingLoc(null); }}
+                                                        style={{ width: '90px', padding: '4px 8px', border: `1.5px solid ${G}`, borderRadius: '6px', fontSize: '13px', fontFamily: 'system-ui,sans-serif', outline: 'none' }}
+                                                    />
+                                                    <button onClick={() => handleSaveBudget(loc)} disabled={saving} style={{ padding: '4px 12px', background: G, color: WH, border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'system-ui,sans-serif' }}>Save</button>
+                                                    <button onClick={() => setEditingLoc(null)} style={{ padding: '4px 10px', background: 'none', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '12px', color: '#64748b', cursor: 'pointer', fontFamily: 'system-ui,sans-serif' }}>Cancel</button>
+                                                </div>
+                                            ) : (
+                                                <button onClick={() => handleEditBudget(loc)} style={{ fontSize: '13px', color: budget > 0 ? '#64748b' : G, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', fontWeight: budget > 0 ? '600' : '800', padding: 0 }}>
+                                                    {budget > 0 ? `$${budget.toFixed(2)} budget` : '+ Set budget'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {budget > 0 && (
+                                        <div style={{ height: '8px', background: '#f1f5f9', borderRadius: '99px', overflow: 'hidden' }}>
+                                            <div style={{ height: '100%', width: `${pct}%`, background: over ? `linear-gradient(90deg, ${RED}, #ef4444)` : `linear-gradient(90deg, ${G}, #00c47a)`, borderRadius: '99px', transition: 'width 0.5s ease' }} />
+                                        </div>
+                                    )}
+                                    {budget > 0 && (
+                                        <div style={{ fontSize: '11px', color: over ? RED : '#94a3b8', marginTop: '5px' }}>
+                                            {over ? `$${(spent - budget).toFixed(2)} over limit` : `$${(budget - spent).toFixed(2)} remaining · ${Math.round(pct)}% used`}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             {/* Main grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
 
                 {/* Recent Receipts */}
-                <div style={{ background: WH, borderRadius: '16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+                <div style={{ background: WH, borderRadius: '16px', boxShadow: SHADOW, overflow: 'hidden' }}>
                     <div style={{ padding: '18px 22px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ fontSize: '13px', fontWeight: '800', color: BK, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Recent Receipts</div>
                         {recent.length > 0 && (
@@ -87,13 +192,6 @@ export function ReceiptDash({ receipts, onUpload, onViewAll, setSelReceipt, setV
                     <div style={{ padding: '8px 0' }}>
                         {recent.length === 0 ? (
                             <div style={{ textAlign: 'center', padding: '32px 20px' }}>
-                                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: PINK_LIGHT, margin: '0 auto 12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <div style={{ width: '22px', height: '28px', border: `2px solid ${G}`, borderRadius: '3px', position: 'relative' }}>
-                                        <div style={{ position: 'absolute', top: '5px', left: '3px', right: '3px', height: '2px', background: G, borderRadius: '1px' }} />
-                                        <div style={{ position: 'absolute', top: '10px', left: '3px', right: '3px', height: '2px', background: G, borderRadius: '1px' }} />
-                                        <div style={{ position: 'absolute', top: '15px', left: '3px', width: '8px', height: '2px', background: G, borderRadius: '1px' }} />
-                                    </div>
-                                </div>
                                 <div style={{ fontSize: '13px', fontWeight: '700', color: BK, marginBottom: '4px' }}>No receipts yet</div>
                                 <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '16px' }}>Scan your first receipt to get started</div>
                                 <button onClick={onUpload} style={{ padding: '9px 18px', background: G, color: WH, border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'system-ui,sans-serif' }}>Scan First Receipt</button>
@@ -117,35 +215,32 @@ export function ReceiptDash({ receipts, onUpload, onViewAll, setSelReceipt, setV
                 </div>
 
                 {/* Top Vendors */}
-                <div style={{ background: WH, borderRadius: '16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+                <div style={{ background: WH, borderRadius: '16px', boxShadow: SHADOW, overflow: 'hidden' }}>
                     <div style={{ padding: '18px 22px', borderBottom: '1px solid #f1f5f9' }}>
                         <div style={{ fontSize: '13px', fontWeight: '800', color: BK, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Top Vendors</div>
                     </div>
                     <div style={{ padding: '16px 22px' }}>
                         {vendorTotals.length === 0 ? (
                             <div style={{ fontSize: '13px', color: '#94a3b8', padding: '16px 0', textAlign: 'center' }}>No data yet</div>
-                        ) : vendorTotals.map((v, i) => {
-                            const pct = (v.total / maxVendor) * 100;
-                            return (
-                                <div key={v.vendor} style={{ marginBottom: i < vendorTotals.length - 1 ? '16px' : 0 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
-                                        <span style={{ fontSize: '13px', fontWeight: '700', color: BK }}>{v.vendor}</span>
-                                        <div style={{ textAlign: 'right' }}>
-                                            <span style={{ fontSize: '13px', fontWeight: '800', color: G }}>${v.total.toFixed(2)}</span>
-                                            <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: '6px' }}>{v.count} receipt{v.count !== 1 ? 's' : ''}</span>
-                                        </div>
-                                    </div>
-                                    <div style={{ height: '7px', background: '#f1f5f9', borderRadius: '99px', overflow: 'hidden' }}>
-                                        <div style={{ height: '100%', width: `${pct}%`, background: `linear-gradient(90deg, ${G}, #00c47a)`, borderRadius: '99px', transition: 'width 0.6s ease' }} />
+                        ) : vendorTotals.map((v, i) => (
+                            <div key={v.vendor} style={{ marginBottom: i < vendorTotals.length - 1 ? '16px' : 0 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                                    <span style={{ fontSize: '13px', fontWeight: '700', color: BK }}>{v.vendor}</span>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <span style={{ fontSize: '13px', fontWeight: '800', color: G }}>${v.total.toFixed(2)}</span>
+                                        <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: '6px' }}>{v.count} receipt{v.count !== 1 ? 's' : ''}</span>
                                     </div>
                                 </div>
-                            );
-                        })}
+                                <div style={{ height: '7px', background: '#f1f5f9', borderRadius: '99px', overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', width: `${(v.total / maxVendor) * 100}%`, background: `linear-gradient(90deg, ${G}, #00c47a)`, borderRadius: '99px', transition: 'width 0.6s ease' }} />
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
 
                 {/* Top Spend Items */}
-                <div style={{ background: WH, borderRadius: '16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+                <div style={{ background: WH, borderRadius: '16px', boxShadow: SHADOW, overflow: 'hidden' }}>
                     <div style={{ padding: '18px 22px', borderBottom: '1px solid #f1f5f9' }}>
                         <div style={{ fontSize: '13px', fontWeight: '800', color: BK, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Top Spend Items</div>
                     </div>

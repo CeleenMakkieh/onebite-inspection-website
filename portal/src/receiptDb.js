@@ -1,5 +1,5 @@
 import { db, storage } from './firebase';
-import { collection, doc, getDocs, setDoc, deleteDoc, query, where, orderBy } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
 // ── Firestore ──
@@ -36,6 +36,19 @@ export async function fetchReceiptItems(receiptId) {
 
 export async function deleteReceiptItems(receiptId) {
     await deleteDoc(doc(db, 'receipt_items', String(receiptId)));
+}
+
+// ── Budgets ──
+
+export async function fetchBudgets() {
+    const snap = await getDoc(doc(db, 'settings', 'monthlyBudgets'));
+    return snap.exists() ? (snap.data().data || {}) : {};
+}
+
+export async function saveBudget(location, amount) {
+    const snap = await getDoc(doc(db, 'settings', 'monthlyBudgets'));
+    const existing = snap.exists() ? (snap.data().data || {}) : {};
+    await setDoc(doc(db, 'settings', 'monthlyBudgets'), { data: { ...existing, [location]: amount } });
 }
 
 // ── Firebase Storage ──
