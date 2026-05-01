@@ -98,7 +98,10 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
                                     <thead><tr style={{ borderBottom: '2px solid #f1f5f9', background: '#f8fafc' }}>{['Item', 'Qty', 'Unit', 'Unit Price', 'Line Total'].map(h => <th key={h} style={TH}>{h}</th>)}</tr></thead>
                                     <tbody>{items.map((it, i) => (
                                         <tr key={i} style={{ borderBottom: i < items.length - 1 ? '1px solid #f1f5f9' : 'none' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                            <td style={{ padding: '11px 12px', fontWeight: '700', color: BK }}>{it.name}</td>
+                                            <td style={{ padding: '11px 12px', fontWeight: '700', color: BK }}>
+                                                {it.name}
+                                                {it.needsReview && <span title="Name may be inaccurate — needs review" style={{ marginLeft: '6px', fontSize: '10px', background: '#fef3c7', color: '#d97706', padding: '1px 6px', borderRadius: '99px', fontWeight: '700', verticalAlign: 'middle' }}>Review</span>}
+                                            </td>
                                             <td style={{ padding: '11px 12px', color: '#64748b' }}>{it.quantity}</td>
                                             <td style={{ padding: '11px 12px', color: '#94a3b8' }}>{it.unit}</td>
                                             <td style={{ padding: '11px 12px', color: '#64748b' }}>${(parseFloat(it.unitPrice) || 0).toFixed(2)}</td>
@@ -131,7 +134,10 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
                                             <thead><tr style={{ borderBottom: '1px solid #f1f5f9' }}>{['Item', 'Qty', 'Unit', 'Unit Price', 'Line Total'].map(h => <th key={h} style={TH}>{h}</th>)}</tr></thead>
                                             <tbody>{grouped[cat].map((it, i) => (
                                                 <tr key={i} style={{ borderBottom: i < grouped[cat].length - 1 ? '1px solid #f1f5f9' : 'none' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                                    <td style={{ padding: '11px 12px', fontWeight: '700', color: BK }}>{it.name}</td>
+                                                    <td style={{ padding: '11px 12px', fontWeight: '700', color: BK }}>
+                                                        {it.name}
+                                                        {it.needsReview && <span title="Name may be inaccurate — needs review" style={{ marginLeft: '6px', fontSize: '10px', background: '#fef3c7', color: '#d97706', padding: '1px 6px', borderRadius: '99px', fontWeight: '700', verticalAlign: 'middle' }}>Review</span>}
+                                                    </td>
                                                     <td style={{ padding: '11px 12px', color: '#64748b' }}>{it.quantity}</td>
                                                     <td style={{ padding: '11px 12px', color: '#94a3b8' }}>{it.unit}</td>
                                                     <td style={{ padding: '11px 12px', color: '#64748b' }}>${(parseFloat(it.unitPrice) || 0).toFixed(2)}</td>

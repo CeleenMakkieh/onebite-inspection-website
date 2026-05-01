@@ -142,10 +142,11 @@ async function cleanItemNames(items) {
                     content: `You are a grocery/restaurant supply receipt parser. These item names came from OCR scanning a receipt — they contain store brand prefixes, abbreviations, and product codes. Use your knowledge of food products to decode them.
 
 For each item:
-1. Write a clean, human-readable product name. Decode ALL abbreviations, remove store brand prefixes and item codes.
+1. Write a clean, human-readable product name. Decode ALL abbreviations, remove store brand prefixes and item codes. Examples: "KRO KALE" → "Kale", "SNPC KIWI" → "Kiwi", "DELM UTRMLN" → "Del Monte Watermelon", "BNS CHKN BRS" → "Boneless Chicken Breast".
 2. Assign a category from ONLY this list: ${CATEGORIES.join(', ')}
+3. Set "confident" to true if you're confident in the decoded name, or false if you're guessing (e.g. unrecognized store codes you cannot decode).
 
-Return ONLY a valid JSON array, same length and order as input. Each element: {"name": "Clean Name", "category": "Category"}. No markdown, no explanation.
+Return ONLY a valid JSON array, same length and order as input. Each element: {"name": "Clean Name", "category": "Category", "confident": true}. No markdown, no explanation.
 
 Items: ${JSON.stringify(names)}`
                 }]
@@ -171,6 +172,7 @@ Items: ${JSON.stringify(names)}`
                     name: cleaned[i]?.name || it.name,
                     category: cleaned[i]?.category || '',
                     _claudeCleaned: true,
+                    needsReview: cleaned[i]?.confident === false,
                 }));
             }
         }

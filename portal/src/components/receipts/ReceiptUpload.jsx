@@ -219,6 +219,7 @@ export function ReceiptUpload({ user, onSaved }) {
             name: it.name || '', quantity: it.quantity ?? 1, unit: it.unit || 'ea',
             unitPrice: it.unitPrice ?? '', lineTotal: it.lineTotal ?? '',
             confidence: it.confidence ?? 1, category: it.category || '',
+            needsReview: it.needsReview || false,
         })) : [emptyItem()]);
         setSubtotal(data.subtotal ?? '');
         setTax(data.tax ?? '');
@@ -304,6 +305,7 @@ export function ReceiptUpload({ user, onSaved }) {
                 name: it.name.trim(), quantity: parseFloat(it.quantity) || 1, unit: it.unit || 'ea',
                 unitPrice: parseFloat(it.unitPrice) || 0, lineTotal: parseFloat(it.lineTotal) || 0,
                 category: it.category || '',
+                needsReview: it.needsReview || false,
             }));
             await Promise.all([saveReceipt(receipt), saveReceiptItems(id, cleanItems)]);
             onSaved(receipt);
@@ -507,11 +509,12 @@ export function ReceiptUpload({ user, onSaved }) {
                                                     const nameIssue = issues.find(x => x.field === 'name');
                                                     const totalIssue = issues.find(x => x.field === 'lineTotal');
                                                     return (
-                                                        <tr key={i} style={{ borderBottom: '1px solid #f8fafc', background: hasIssue ? '#fffbeb' : 'transparent', verticalAlign: 'top' }}>
+                                                        <tr key={i} style={{ borderBottom: '1px solid #f8fafc', background: (hasIssue || it.needsReview) ? '#fffbeb' : 'transparent', verticalAlign: 'top' }}>
                                                             <td style={{ padding: '5px 5px' }}>
                                                                 <input value={it.name} onChange={e => updateItem(i, 'name', e.target.value)} placeholder="Enter item name"
-                                                                    style={{ ...inp, padding: '7px 9px', width: '100%', minWidth: '140px', boxSizing: 'border-box', borderColor: nameIssue ? '#f59e0b' : '#ddd' }} />
-                                                                {nameIssue && <div style={{ fontSize: '10px', color: '#b45309', marginTop: '3px', lineHeight: 1.4 }}>{nameIssue.msg}</div>}
+                                                                    style={{ ...inp, padding: '7px 9px', width: '100%', minWidth: '140px', boxSizing: 'border-box', borderColor: it.needsReview ? '#f59e0b' : nameIssue ? '#f59e0b' : '#ddd' }} />
+                                                                {it.needsReview && <div style={{ fontSize: '10px', color: '#b45309', marginTop: '3px', lineHeight: 1.4 }}>Claude wasn't sure — verify this name</div>}
+                                                                {!it.needsReview && nameIssue && <div style={{ fontSize: '10px', color: '#b45309', marginTop: '3px', lineHeight: 1.4 }}>{nameIssue.msg}</div>}
                                                             </td>
                                                             <td style={{ padding: '5px 5px' }}>
                                                                 <input type="number" value={it.quantity} onChange={e => updateItem(i, 'quantity', e.target.value)}

@@ -1,15 +1,34 @@
 import { useState, useEffect } from 'react';
 import { G, WH, BK } from '../../constants';
 import { fetchReceiptItems } from '../../receiptDb';
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx-js-style';
 
 const SHADOW = '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06)';
 const TH = { textAlign: 'left', padding: '9px 12px', color: '#64748b', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: '700' };
 
+// Excel cell styles matching app palette (no # prefix for rgb)
+const XL = {
+    colHeader: { fill: { fgColor: { rgb: '008a5f' } }, font: { color: { rgb: 'FFFFFF' }, bold: true, sz: 10, name: 'Arial' }, alignment: { horizontal: 'left', vertical: 'center' } },
+    catHeader: { fill: { fgColor: { rgb: '005c3f' } }, font: { color: { rgb: 'FFFFFF' }, bold: true, sz: 11, name: 'Arial' }, alignment: { horizontal: 'left', vertical: 'center' } },
+    subtotal:  { fill: { fgColor: { rgb: 'e6f5ef' } }, font: { color: { rgb: '005c3f' }, bold: true, sz: 10, name: 'Arial' }, alignment: { horizontal: 'left', vertical: 'center' } },
+    subtotalN: { fill: { fgColor: { rgb: 'e6f5ef' } }, font: { color: { rgb: '005c3f' }, bold: true, sz: 10, name: 'Arial' }, alignment: { horizontal: 'right', vertical: 'center' }, numFmt: '"$"#,##0.00' },
+    data:      { fill: { fgColor: { rgb: 'FFFFFF' } }, font: { color: { rgb: '111111' }, sz: 10, name: 'Arial' }, alignment: { horizontal: 'left', vertical: 'center' } },
+    dataN:     { fill: { fgColor: { rgb: 'FFFFFF' } }, font: { color: { rgb: '111111' }, sz: 10, name: 'Arial' }, alignment: { horizontal: 'right', vertical: 'center' }, numFmt: '"$"#,##0.00' },
+    review:    { fill: { fgColor: { rgb: 'fef3c7' } }, font: { color: { rgb: 'd97706' }, bold: true, sz: 10, name: 'Arial' }, alignment: { horizontal: 'left', vertical: 'center' } },
+    blank:     { fill: { fgColor: { rgb: 'f8fafc' } }, font: { sz: 10, name: 'Arial' } },
+};
+
+const CAT_ORDER = ['Meat & Poultry', 'Produce & Fresh Items', 'Dairy & Eggs', 'Dry Goods & Pantry', 'Frozen Foods', 'Beverages', 'Spices & Condiments', 'Bread & Bakery', 'Containers & Supplies', 'Cleaning & Household', 'Pickles & Preserved Items', 'Adjustments & Fees', 'Miscellaneous'];
+
+const today = new Date().toISOString().split('T')[0];
+const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+
 export function ReceiptReports({ receipts }) {
     const [allItems, setAllItems] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [tab, setTab] = useState('items');
+    const [tab, setTab] = useState('categories');
+    const [exportFrom, setExportFrom] = useState(firstOfMonth);
+    const [exportTo, setExportTo] = useState(today);
 
     useEffect(() => {
         async function load() {
@@ -20,6 +39,12 @@ export function ReceiptReports({ receipts }) {
         if (receipts.length) load();
         else setLoading(false);
     }, [receipts]);
+
+    // Items within export date range (for the count badge)
+    const exportReceiptIds = new Set(
+        receipts.filter(r => (!exportFrom || r.date >= exportFrom) && (!exportTo || r.date <= exportTo)).map(r => r.id)
+    );
+    const exportCount = allItems.filter(it => exportReceiptIds.has(it.receiptId)).length;
 
     const itemTotals = Object.values(
         allItems.reduce((acc, it) => {
@@ -32,7 +57,6 @@ export function ReceiptReports({ receipts }) {
         }, {})
     ).sort((a, b) => b.totalSpend - a.totalSpend);
 
-    const CAT_ORDER = ['Meat & Poultry', 'Produce & Fresh Items', 'Dairy & Eggs', 'Dry Goods & Pantry', 'Frozen Foods', 'Beverages', 'Spices & Condiments', 'Bread & Bakery', 'Containers & Supplies', 'Cleaning & Household', 'Pickles & Preserved Items', 'Adjustments & Fees', 'Miscellaneous'];
     const categoryTotals = Object.values(
         allItems.reduce((acc, it) => {
             const cat = it.category || 'Other';
@@ -79,13 +103,104 @@ export function ReceiptReports({ receipts }) {
             return { name: entry.name, vendors };
         });
 
+    function styleSheet(ws, rowMeta, totalCol, numCols) {
+        rowMeta.forEach((type, r) => {
+            for (let c = 0; c < numCols; c++) {
+                const cellRef = XLSX.utils.encode_cell({ r, c });
+                if (!ws[cellRef]) ws[cellRef] = { v: '', t: 's' };
+                const isNum = c === totalCol || c === totalCol - 1; // unit price + total
+                if (type === 'colheader') ws[cellRef].s = XL.colHeader;
+                else if (type === 'catHeader') ws[cellRef].s = XL.catHeader;
+                else if (type === 'subtotal') ws[cellRef].s = (c === totalCol) ? XL.subtotalN : XL.subtotal;
+                else if (type === 'review') ws[cellRef].s = (c === numCols - 1) ? XL.review : (c === totalCol ? XL.dataN : XL.data);
+                else if (type === 'data') ws[cellRef].s = (c === totalCol) ? XL.dataN : XL.data;
+                else if (type === 'blank') ws[cellRef].s = XL.blank;
+            }
+        });
+    }
+
     const handleExport = () => {
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(receipts.map(r => ({ Vendor: r.vendor, Date: r.date, 'Receipt #': r.receiptNumber || '', Location: r.location, Subtotal: r.subtotal, Tax: r.tax, Total: r.total, 'Uploaded By': r.uploadedBy }))), 'Receipts');
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allItems.map(it => ({ Vendor: it.vendor, Date: it.date, Item: it.name, Quantity: it.quantity, Unit: it.unit, 'Unit Price': it.unitPrice, 'Line Total': it.lineTotal }))), 'Line Items');
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(itemTotals.map(it => ({ Item: it.name, 'Total Qty': it.totalQty.toFixed(2), 'Total Spend': it.totalSpend.toFixed(2) }))), 'Item Totals');
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vendorTotals.map(v => ({ Vendor: v.vendor, 'Total Spend': v.totalSpend.toFixed(2), Receipts: v.count, 'Avg Receipt': (v.totalSpend / v.count).toFixed(2) }))), 'Vendor Spending');
-        XLSX.writeFile(wb, `receipts_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+        // Filter by date range
+        const fReceipts = receipts.filter(r => (!exportFrom || r.date >= exportFrom) && (!exportTo || r.date <= exportTo));
+        const fIds = new Set(fReceipts.map(r => r.id));
+        const fItems = allItems.filter(it => fIds.has(it.receiptId));
+
+        // ── Sheet 1: By Category ──
+        const catCols = 7;
+        const catTotalCol = 5; // 0-indexed "Total ($)"
+        const catAoa = [['Category', 'Receipt #', 'Date', 'Vendor', 'Item', 'Total ($)', 'Notes']];
+        const catMeta = ['colheader'];
+
+        const catGrouped = {};
+        fItems.forEach(it => {
+            const cat = it.category || 'Miscellaneous';
+            if (!catGrouped[cat]) catGrouped[cat] = [];
+            catGrouped[cat].push(it);
+        });
+        const orderedCats = [...CAT_ORDER.filter(c => catGrouped[c]), ...Object.keys(catGrouped).filter(c => !CAT_ORDER.includes(c))];
+
+        orderedCats.forEach(cat => {
+            catAoa.push([cat, '', '', '', '', '', '']);
+            catMeta.push('catHeader');
+            catGrouped[cat].forEach(it => {
+                const rcpt = fReceipts.find(r => r.id === it.receiptId);
+                catAoa.push(['', rcpt?.receiptNumber || it.receiptId, it.date, it.vendor, it.name, parseFloat(it.lineTotal) || 0, it.needsReview ? 'Needs Review' : '']);
+                catMeta.push(it.needsReview ? 'review' : 'data');
+            });
+            const sub = catGrouped[cat].reduce((s, it) => s + (parseFloat(it.lineTotal) || 0), 0);
+            catAoa.push([`${cat} — Subtotal`, '', '', '', '', sub, '']);
+            catMeta.push('subtotal');
+            catAoa.push(['', '', '', '', '', '', '']);
+            catMeta.push('blank');
+        });
+
+        const catWs = XLSX.utils.aoa_to_sheet(catAoa);
+        catWs['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 36 }, { wch: 13 }, { wch: 26 }];
+        styleSheet(catWs, catMeta, catTotalCol, catCols);
+        XLSX.utils.book_append_sheet(wb, catWs, 'By Category');
+
+        // ── Sheet 2: Detailed ──
+        const detCols = 10;
+        const detHeaders = ['Receipt #', 'Date Purchased', 'Vendor', 'Item', 'Category', 'Qty', 'Unit', 'Unit Price ($)', 'Total ($)', 'Needs Review'];
+        const detAoa = [detHeaders];
+        const detMeta = ['colheader'];
+
+        fItems.forEach(it => {
+            const rcpt = fReceipts.find(r => r.id === it.receiptId);
+            detAoa.push([
+                rcpt?.receiptNumber || it.receiptId,
+                it.date,
+                it.vendor,
+                it.name,
+                it.category || '',
+                parseFloat(it.quantity) || 1,
+                it.unit || '',
+                parseFloat(it.unitPrice) || 0,
+                parseFloat(it.lineTotal) || 0,
+                it.needsReview ? 'Yes' : '',
+            ]);
+            detMeta.push(it.needsReview ? 'review' : 'data');
+        });
+
+        const detWs = XLSX.utils.aoa_to_sheet(detAoa);
+        detWs['!cols'] = [{ wch: 12 }, { wch: 15 }, { wch: 22 }, { wch: 36 }, { wch: 22 }, { wch: 7 }, { wch: 7 }, { wch: 14 }, { wch: 13 }, { wch: 14 }];
+
+        // Style detailed sheet — unit price col = 7, total col = 8, review col = 9
+        detMeta.forEach((type, r) => {
+            for (let c = 0; c < detCols; c++) {
+                const cellRef = XLSX.utils.encode_cell({ r, c });
+                if (!detWs[cellRef]) detWs[cellRef] = { v: '', t: 's' };
+                if (type === 'colheader') detWs[cellRef].s = XL.colHeader;
+                else if (type === 'review') detWs[cellRef].s = (c === 9) ? XL.review : (c === 7 || c === 8) ? XL.dataN : XL.data;
+                else detWs[cellRef].s = (c === 7 || c === 8) ? XL.dataN : XL.data;
+            }
+        });
+        XLSX.utils.book_append_sheet(wb, detWs, 'Detailed');
+
+        const label = exportFrom && exportTo ? `${exportFrom}_to_${exportTo}` : today;
+        XLSX.writeFile(wb, `receipts_${label}.xlsx`);
     };
 
     if (loading) return <div style={{ fontSize: '13px', color: '#94a3b8', padding: '40px' }}>Loading report data…</div>;
@@ -94,9 +209,23 @@ export function ReceiptReports({ receipts }) {
 
     return (
         <div style={{ maxWidth: '860px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '10px' }}>
-                <div style={{ fontSize: '20px', fontWeight: '900', color: BK, letterSpacing: '-0.01em' }}>Reports</div>
-                <button onClick={handleExport} style={{ padding: '10px 20px', background: G, color: WH, border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'system-ui,sans-serif' }}>Export Excel</button>
+            <div style={{ fontSize: '20px', fontWeight: '900', color: BK, letterSpacing: '-0.01em', marginBottom: '18px' }}>Reports</div>
+
+            {/* Export card */}
+            <div style={{ background: WH, borderRadius: '14px', boxShadow: SHADOW, padding: '16px 20px', marginBottom: '22px', display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
+                <div style={{ fontSize: '11px', fontWeight: '800', color: BK, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Export Excel</div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
+                    <input type="date" value={exportFrom} onChange={e => setExportFrom(e.target.value)}
+                        style={{ border: '1px solid #ddd', borderRadius: '7px', padding: '7px 10px', fontSize: '13px', fontFamily: 'system-ui,sans-serif', outline: 'none' }} />
+                    <span style={{ color: '#94a3b8', fontSize: '13px', fontWeight: '600' }}>to</span>
+                    <input type="date" value={exportTo} onChange={e => setExportTo(e.target.value)}
+                        style={{ border: '1px solid #ddd', borderRadius: '7px', padding: '7px 10px', fontSize: '13px', fontFamily: 'system-ui,sans-serif', outline: 'none' }} />
+                    <span style={{ fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap' }}>{exportCount} item{exportCount !== 1 ? 's' : ''} in range</span>
+                </div>
+                <button onClick={handleExport}
+                    style={{ padding: '9px 22px', background: G, color: WH, border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', flexShrink: 0 }}>
+                    Export
+                </button>
             </div>
 
             <div style={{ display: 'flex', gap: '6px', marginBottom: '20px', flexWrap: 'wrap' }}>
