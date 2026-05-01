@@ -360,6 +360,21 @@ export function ReceiptUpload({ user, onSaved }) {
                         <h2 style={{ margin: '0 0 6px', fontSize: '18px', fontWeight: '800', color: BK }}>Upload Receipt</h2>
                         <p style={{ margin: '0 0 24px', fontSize: '13px', color: '#888' }}>Take a photo or upload an image. All line items will be extracted automatically.</p>
 
+                        {/* Location selector for Owner */}
+                        {user.role === 'Owner' && (
+                            <div style={{ marginBottom: '20px', padding: '16px 20px', background: 'rgba(0,138,95,0.06)', borderRadius: '12px', border: '1.5px solid rgba(0,138,95,0.2)' }}>
+                                <label style={{ ...lbl, color: G, marginBottom: '8px' }}>Which location is this receipt for?</label>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    {LOCS.map(l => (
+                                        <button key={l} onClick={() => setLocation(l)}
+                                            style={{ padding: '8px 18px', borderRadius: '99px', border: `1.5px solid ${location === l ? G : '#e2e8f0'}`, background: location === l ? G : WH, color: location === l ? WH : '#64748b', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', transition: 'all 0.15s' }}>
+                                            {l}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Camera button */}
                         <button
                             onClick={() => setShowCamera(true)}
