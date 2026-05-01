@@ -24,13 +24,32 @@ export function ReceiptReports({ receipts }) {
     const itemTotals = Object.values(
         allItems.reduce((acc, it) => {
             const key = it.name.toLowerCase();
-            if (!acc[key]) acc[key] = { name: it.name, totalQty: 0, totalSpend: 0, count: 0 };
+            if (!acc[key]) acc[key] = { name: it.name, category: it.category || '', totalQty: 0, totalSpend: 0, count: 0 };
             acc[key].totalQty += parseFloat(it.quantity) || 0;
             acc[key].totalSpend += parseFloat(it.lineTotal) || 0;
             acc[key].count += 1;
             return acc;
         }, {})
     ).sort((a, b) => b.totalSpend - a.totalSpend);
+
+    const CAT_ORDER = ['Meat & Poultry', 'Produce & Fresh Items', 'Dairy & Eggs', 'Dry Goods & Pantry', 'Frozen Foods', 'Beverages', 'Spices & Condiments', 'Bread & Bakery', 'Containers & Supplies', 'Cleaning & Household', 'Pickles & Preserved Items', 'Adjustments & Fees', 'Miscellaneous'];
+    const categoryTotals = Object.values(
+        allItems.reduce((acc, it) => {
+            const cat = it.category || 'Other';
+            if (!acc[cat]) acc[cat] = { category: cat, totalSpend: 0, count: 0 };
+            acc[cat].totalSpend += parseFloat(it.lineTotal) || 0;
+            acc[cat].count += 1;
+            return acc;
+        }, {})
+    ).sort((a, b) => {
+        const ai = CAT_ORDER.indexOf(a.category);
+        const bi = CAT_ORDER.indexOf(b.category);
+        if (ai === -1 && bi === -1) return b.totalSpend - a.totalSpend;
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+    });
+    const maxCatSpend = categoryTotals.reduce((m, c) => Math.max(m, c.totalSpend), 0);
 
     const vendorTotals = Object.values(
         receipts.reduce((acc, r) => {
@@ -71,7 +90,7 @@ export function ReceiptReports({ receipts }) {
 
     if (loading) return <div style={{ fontSize: '13px', color: '#94a3b8', padding: '40px' }}>Loading report data…</div>;
 
-    const tabs = [{ id: 'items', label: 'Item Totals' }, { id: 'vendors', label: 'Vendor Spending' }, { id: 'compare', label: 'Price Comparison' }];
+    const tabs = [{ id: 'categories', label: 'By Category' }, { id: 'items', label: 'Item Totals' }, { id: 'vendors', label: 'Vendor Spending' }, { id: 'compare', label: 'Price Comparison' }];
 
     return (
         <div style={{ maxWidth: '860px' }}>
@@ -89,6 +108,30 @@ export function ReceiptReports({ receipts }) {
                 ))}
             </div>
 
+            {tab === 'categories' && (
+                <div style={{ background: WH, borderRadius: '16px', boxShadow: SHADOW, overflow: 'hidden' }}>
+                    <div style={{ padding: '18px 22px', borderBottom: '1px solid #f1f5f9' }}>
+                        <div style={{ fontSize: '12px', fontWeight: '800', color: BK, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Spending by Category</div>
+                    </div>
+                    {categoryTotals.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '13px', padding: '32px', textAlign: 'center' }}>No data yet — scan receipts to see categories</div> : (
+                        <div style={{ padding: '8px 0' }}>
+                            {categoryTotals.map((cat, i) => (
+                                <div key={i} style={{ padding: '14px 22px', borderBottom: i < categoryTotals.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                        <div style={{ fontWeight: '700', fontSize: '13px', color: BK }}>{cat.category}</div>
+                                        <div style={{ fontSize: '14px', fontWeight: '800', color: G }}>${cat.totalSpend.toFixed(2)}</div>
+                                    </div>
+                                    <div style={{ height: '6px', background: '#f1f5f9', borderRadius: '99px', overflow: 'hidden' }}>
+                                        <div style={{ height: '100%', borderRadius: '99px', background: `linear-gradient(90deg, ${G}, #00c47a)`, width: `${maxCatSpend > 0 ? (cat.totalSpend / maxCatSpend) * 100 : 0}%`, transition: 'width 0.4s ease' }} />
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '5px' }}>{cat.count} line item{cat.count !== 1 ? 's' : ''}</div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
             {tab === 'items' && (
                 <div style={{ background: WH, borderRadius: '16px', boxShadow: SHADOW, overflow: 'hidden' }}>
                     <div style={{ padding: '18px 22px', borderBottom: '1px solid #f1f5f9' }}>
@@ -96,11 +139,12 @@ export function ReceiptReports({ receipts }) {
                     </div>
                     {itemTotals.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '13px', padding: '32px', textAlign: 'center' }}>No data yet</div> : (
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                            <thead><tr style={{ borderBottom: '2px solid #f1f5f9', background: '#f8fafc' }}>{['Item', 'Total Qty', 'Total Spend'].map(h => <th key={h} style={TH}>{h}</th>)}</tr></thead>
+                            <thead><tr style={{ borderBottom: '2px solid #f1f5f9', background: '#f8fafc' }}>{['Item', 'Category', 'Total Qty', 'Total Spend'].map(h => <th key={h} style={TH}>{h}</th>)}</tr></thead>
                             <tbody>
                                 {itemTotals.map((it, i) => (
                                     <tr key={i} style={{ borderBottom: i < itemTotals.length - 1 ? '1px solid #f1f5f9' : 'none' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                         <td style={{ padding: '11px 12px', fontWeight: '700', color: BK }}>{it.name}</td>
+                                        <td style={{ padding: '11px 12px' }}>{it.category ? <span style={{ padding: '3px 10px', background: 'rgba(0,138,95,0.08)', borderRadius: '99px', fontSize: '11px', fontWeight: '700', color: G }}>{it.category}</span> : <span style={{ color: '#94a3b8', fontSize: '12px' }}>—</span>}</td>
                                         <td style={{ padding: '11px 12px', color: '#64748b' }}>{it.totalQty % 1 === 0 ? it.totalQty : it.totalQty.toFixed(2)}</td>
                                         <td style={{ padding: '11px 12px', fontWeight: '800', color: G }}>${it.totalSpend.toFixed(2)}</td>
                                     </tr>

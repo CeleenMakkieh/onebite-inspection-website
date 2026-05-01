@@ -65,6 +65,8 @@ function mapVeryfiToSchema(data) {
     };
 }
 
+const CATEGORIES = ['Meat & Poultry', 'Produce & Fresh Items', 'Dairy & Eggs', 'Dry Goods & Pantry', 'Frozen Foods', 'Beverages', 'Spices & Condiments', 'Bread & Bakery', 'Containers & Supplies', 'Cleaning & Household', 'Pickles & Preserved Items', 'Adjustments & Fees', 'Miscellaneous'];
+
 async function cleanItemNames(items) {
     const names = items.map(it => it.name);
 
@@ -79,10 +81,20 @@ async function cleanItemNames(items) {
             },
             body: JSON.stringify({
                 model: 'claude-haiku-4-5-20251001',
-                max_tokens: 1024,
+                max_tokens: 2048,
                 messages: [{
                     role: 'user',
-                    content: `These are item names from a restaurant supply receipt OCR scan. Many have abbreviations, codes, or are truncated. Clean each name to be human-readable: expand abbreviations, fix truncations, remove item codes. Keep the food/product identity accurate. Return ONLY a JSON array of cleaned name strings in the same order. No other text.\n\n${JSON.stringify(names)}`
+                    content: `These are item names from a restaurant supply receipt OCR scan. Many have abbreviations, codes, or are truncated.
+
+For each item:
+1. Clean the name: expand abbreviations, fix truncations, remove item codes. Keep the food/product identity accurate.
+2. Assign a category from this list ONLY: ${CATEGORIES.join(', ')}
+
+Return ONLY a JSON array in the same order as the input. Each element must be an object with "name" and "category". No other text.
+
+Example: [{"name": "Roma Tomatoes", "category": "Produce"}, {"name": "Chicken Breast", "category": "Meat & Poultry"}]
+
+Input: ${JSON.stringify(names)}`
                 }]
             })
         });
@@ -96,7 +108,11 @@ async function cleanItemNames(items) {
         if (match) {
             const cleaned = JSON.parse(match[0]);
             if (Array.isArray(cleaned) && cleaned.length === items.length) {
-                return items.map((it, i) => ({ ...it, name: cleaned[i] || it.name }));
+                return items.map((it, i) => ({
+                    ...it,
+                    name: cleaned[i]?.name || it.name,
+                    category: cleaned[i]?.category || 'Other',
+                }));
             }
         }
     } catch (_) {}

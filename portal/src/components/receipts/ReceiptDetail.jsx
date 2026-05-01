@@ -68,32 +68,63 @@ export function ReceiptDetail({ receipt, onBack, onDeleted }) {
                     <div style={{ fontSize: '13px', color: '#94a3b8', padding: '32px', textAlign: 'center' }}>Loading…</div>
                 ) : items.length === 0 ? (
                     <div style={{ fontSize: '13px', color: '#94a3b8', padding: '32px', textAlign: 'center' }}>No items recorded.</div>
-                ) : (
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '2px solid #f1f5f9', background: '#f8fafc' }}>
-                                    {['Item', 'Qty', 'Unit', 'Unit Price', 'Line Total'].map(h => (
-                                        <th key={h} style={TH}>{h}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {items.map((it, i) => (
-                                    <tr key={i} style={{ borderBottom: i < items.length - 1 ? '1px solid #f1f5f9' : 'none' }}
-                                        onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                        <td style={{ padding: '11px 12px', fontWeight: '700', color: BK }}>{it.name}</td>
-                                        <td style={{ padding: '11px 12px', color: '#64748b' }}>{it.quantity}</td>
-                                        <td style={{ padding: '11px 12px', color: '#94a3b8' }}>{it.unit}</td>
-                                        <td style={{ padding: '11px 12px', color: '#64748b' }}>${(parseFloat(it.unitPrice) || 0).toFixed(2)}</td>
-                                        <td style={{ padding: '11px 12px', fontWeight: '800', color: BK }}>${(parseFloat(it.lineTotal) || 0).toFixed(2)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
+                ) : (() => {
+                    const hasCats = items.some(it => it.category);
+                    if (!hasCats) {
+                        // Legacy receipts without categories — flat table
+                        return (
+                            <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                    <thead><tr style={{ borderBottom: '2px solid #f1f5f9', background: '#f8fafc' }}>{['Item', 'Qty', 'Unit', 'Unit Price', 'Line Total'].map(h => <th key={h} style={TH}>{h}</th>)}</tr></thead>
+                                    <tbody>{items.map((it, i) => (
+                                        <tr key={i} style={{ borderBottom: i < items.length - 1 ? '1px solid #f1f5f9' : 'none' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                            <td style={{ padding: '11px 12px', fontWeight: '700', color: BK }}>{it.name}</td>
+                                            <td style={{ padding: '11px 12px', color: '#64748b' }}>{it.quantity}</td>
+                                            <td style={{ padding: '11px 12px', color: '#94a3b8' }}>{it.unit}</td>
+                                            <td style={{ padding: '11px 12px', color: '#64748b' }}>${(parseFloat(it.unitPrice) || 0).toFixed(2)}</td>
+                                            <td style={{ padding: '11px 12px', fontWeight: '800', color: BK }}>${(parseFloat(it.lineTotal) || 0).toFixed(2)}</td>
+                                        </tr>
+                                    ))}</tbody>
+                                </table>
+                            </div>
+                        );
+                    }
+                    // Group by category
+                    const grouped = items.reduce((acc, it) => {
+                        const cat = it.category || 'Other';
+                        if (!acc[cat]) acc[cat] = [];
+                        acc[cat].push(it);
+                        return acc;
+                    }, {});
+                    const CAT_ORDER = ['Meat & Poultry', 'Produce & Fresh Items', 'Dairy & Eggs', 'Dry Goods & Pantry', 'Frozen Foods', 'Beverages', 'Spices & Condiments', 'Bread & Bakery', 'Containers & Supplies', 'Cleaning & Household', 'Pickles & Preserved Items', 'Adjustments & Fees', 'Miscellaneous'];
+                    const cats = [...new Set([...CAT_ORDER.filter(c => grouped[c]), ...Object.keys(grouped).filter(c => !CAT_ORDER.includes(c))])];
+                    return (
+                        <div>
+                            {cats.map((cat, ci) => (
+                                <div key={cat}>
+                                    <div style={{ padding: '10px 22px', background: '#f8fafc', borderBottom: '1px solid #f1f5f9', borderTop: ci > 0 ? '2px solid #f1f5f9' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '11px', fontWeight: '800', color: G, textTransform: 'uppercase', letterSpacing: '0.12em' }}>{cat}</span>
+                                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>${grouped[cat].reduce((s, it) => s + (parseFloat(it.lineTotal) || 0), 0).toFixed(2)}</span>
+                                    </div>
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                            <thead><tr style={{ borderBottom: '1px solid #f1f5f9' }}>{['Item', 'Qty', 'Unit', 'Unit Price', 'Line Total'].map(h => <th key={h} style={TH}>{h}</th>)}</tr></thead>
+                                            <tbody>{grouped[cat].map((it, i) => (
+                                                <tr key={i} style={{ borderBottom: i < grouped[cat].length - 1 ? '1px solid #f1f5f9' : 'none' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                    <td style={{ padding: '11px 12px', fontWeight: '700', color: BK }}>{it.name}</td>
+                                                    <td style={{ padding: '11px 12px', color: '#64748b' }}>{it.quantity}</td>
+                                                    <td style={{ padding: '11px 12px', color: '#94a3b8' }}>{it.unit}</td>
+                                                    <td style={{ padding: '11px 12px', color: '#64748b' }}>${(parseFloat(it.unitPrice) || 0).toFixed(2)}</td>
+                                                    <td style={{ padding: '11px 12px', fontWeight: '800', color: BK }}>${(parseFloat(it.lineTotal) || 0).toFixed(2)}</td>
+                                                </tr>
+                                            ))}</tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })()}
             </div>
 
             <div style={{ marginTop: '14px', fontSize: '11px', color: '#94a3b8' }}>Uploaded by {receipt.uploadedBy}</div>
