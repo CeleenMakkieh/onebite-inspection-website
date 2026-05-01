@@ -11,9 +11,17 @@ export async function scanReceiptImage(file) {
     // Step 2: Map Veryfi response to app schema
     const receipt = mapVeryfiToSchema(veryfiData);
 
-    // Step 3: Clean abbreviated item names with Claude (falls back to raw names if unavailable)
-    if (ANTHROPIC_API_KEY && receipt.items.length > 0) {
-        receipt.items = await cleanItemNames(receipt.items);
+    // Step 3: Clean names + categorize — Claude first, rule-based fallback for everything else
+    if (receipt.items.length > 0) {
+        if (ANTHROPIC_API_KEY) {
+            receipt.items = await cleanItemNames(receipt.items);
+        }
+        // Rule-based cleaner fills in for any item Claude didn't handle
+        receipt.items = receipt.items.map(it => ({
+            ...it,
+            name: it._claudeCleaned ? it.name : cleanNameRules(it.name),
+            category: it.category || guessCategory(it.name),
+        }));
     }
 
     return receipt;
@@ -42,16 +50,46 @@ async function callVeryfi(fileData, fileName) {
     return data;
 }
 
+const UNIT_MAP = {
+    'EA': 'ea', 'EACH': 'ea', 'PC': 'ea', 'PCS': 'ea', 'UNIT': 'ea',
+    'LB': 'lb', 'LBS': 'lb', 'POUND': 'lb', 'POUNDS': 'lb',
+    'OZ': 'oz', 'OUNCE': 'oz', 'OUNCES': 'oz',
+    'KG': 'kg', 'KILO': 'kg', 'KILOGRAM': 'kg',
+    'CS': 'case', 'CASE': 'case', 'CA': 'case',
+    'BX': 'box', 'BOX': 'box',
+    'BG': 'bag', 'BAG': 'bag',
+    'GAL': 'gal', 'GALLON': 'gal', 'GL': 'gal',
+    'PKG': 'pkg', 'PACK': 'pkg', 'PACKAGE': 'pkg', 'PK': 'pkg',
+    'DZ': 'dz', 'DOZEN': 'dz',
+    'CT': 'ct', 'COUNT': 'ct',
+    'QT': 'qt', 'QUART': 'qt',
+    'PT': 'pt', 'PINT': 'pt',
+    'L': 'L', 'LT': 'L', 'LITER': 'L',
+};
+
+function normalizeUnit(raw) {
+    if (!raw) return 'ea';
+    const u = raw.trim().toUpperCase();
+    return UNIT_MAP[u] || raw.toLowerCase() || 'ea';
+}
+
 function mapVeryfiToSchema(data) {
     const items = (data.line_items || [])
-        .map(it => ({
-            name: it.description || it.name || '',
-            quantity: parseFloat(it.quantity) || 1,
-            unit: it.unit_of_measure || 'ea',
-            unitPrice: parseFloat(it.unit_price) || 0,
-            lineTotal: parseFloat(it.total) || 0,
-            confidence: 1,
-        }))
+        .map(it => {
+            const qty = parseFloat(it.quantity) || 1;
+            const lineTotal = parseFloat(it.total) || parseFloat(it.line_total) || 0;
+            const rawUnitPrice = parseFloat(it.unit_price) || parseFloat(it.price) || 0;
+            // Calculate unit price from total/qty if Veryfi didn't extract it
+            const unitPrice = rawUnitPrice > 0 ? rawUnitPrice : (lineTotal > 0 && qty > 0 ? lineTotal / qty : 0);
+            return {
+                name: it.description || it.name || '',
+                quantity: qty,
+                unit: normalizeUnit(it.unit_of_measure),
+                unitPrice: Math.round(unitPrice * 100) / 100,
+                lineTotal,
+                confidence: 1,
+            };
+        })
         .filter(it => it.name.trim());
 
     return {
@@ -63,6 +101,23 @@ function mapVeryfiToSchema(data) {
         tax: parseFloat(data.tax) || 0,
         total: parseFloat(data.total) || 0,
     };
+}
+
+function guessCategory(name) {
+    const n = name.toLowerCase();
+    if (/chicken|beef|pork|lamb|turkey|veal|duck|steak|rib|wing|breast|thigh|sausage|bacon|ham|ground|bnls|chkn|brs|meat|poultry|loin/.test(n)) return 'Meat & Poultry';
+    if (/tomato|lettuce|pepper|onion|garlic|cilantro|parsley|spinach|cucumber|zucchini|eggplant|potato|carrot|celery|mushroom|avocado|lemon|lime|orange|apple|banana|grape|salad|produce|vegetable|fruit|broccoli|cabbage|kale|herb/.test(n)) return 'Produce & Fresh Items';
+    if (/milk|cheese|butter|cream|yogurt|egg|dairy|mozzarella|cheddar|feta|ricotta/.test(n)) return 'Dairy & Eggs';
+    if (/oil|flour|sugar|salt|rice|pasta|sauce|can|jar|bean|lentil|grain|cereal|bread crumb|panko|starch|syrup|honey|mayo|ketchup|mustard|relish/.test(n)) return 'Dry Goods & Pantry';
+    if (/frozen|ice cream|freeze/.test(n)) return 'Frozen Foods';
+    if (/water|juice|soda|drink|beverage|tea|coffee|lemonade|smoothie/.test(n)) return 'Beverages';
+    if (/bread|pita|tortilla|bun|roll|bagel|croissant|muffin|pastry|bakery|loaf/.test(n)) return 'Bread & Bakery';
+    if (/container|cup|lid|straw|napkin|bag|box|wrap|foil|glove|utensil|spoon|fork|plate|supply|plastic|paper/.test(n)) return 'Containers & Supplies';
+    if (/clean|soap|detergent|bleach|sanitizer|disinfect|degreaser|wipe/.test(n)) return 'Cleaning & Household';
+    if (/pickle|preserved|olive|pepperoncini|jalapeno jar|marinated/.test(n)) return 'Pickles & Preserved Items';
+    if (/spice|seasoning|cumin|paprika|oregano|basil|thyme|cinnamon|pepper|chili|turmeric|curry|za.atar|sumac|allspice/.test(n)) return 'Spices & Condiments';
+    if (/fee|deposit|discount|adjust|credit|tax|delivery|charge/.test(n)) return 'Adjustments & Fees';
+    return 'Miscellaneous';
 }
 
 const CATEGORIES = ['Meat & Poultry', 'Produce & Fresh Items', 'Dairy & Eggs', 'Dry Goods & Pantry', 'Frozen Foods', 'Beverages', 'Spices & Condiments', 'Bread & Bakery', 'Containers & Supplies', 'Cleaning & Household', 'Pickles & Preserved Items', 'Adjustments & Fees', 'Miscellaneous'];
@@ -84,25 +139,28 @@ async function cleanItemNames(items) {
                 max_tokens: 2048,
                 messages: [{
                     role: 'user',
-                    content: `These are item names from a restaurant supply receipt OCR scan. Many have abbreviations, codes, or are truncated.
+                    content: `You are a grocery/restaurant supply receipt parser. These item names came from OCR scanning a receipt — they contain store brand prefixes, abbreviations, and product codes. Use your knowledge of food products to decode them.
 
 For each item:
-1. Clean the name: expand abbreviations, fix truncations, remove item codes. Keep the food/product identity accurate.
-2. Assign a category from this list ONLY: ${CATEGORIES.join(', ')}
+1. Write a clean, human-readable product name. Decode ALL abbreviations, remove store brand prefixes and item codes.
+2. Assign a category from ONLY this list: ${CATEGORIES.join(', ')}
 
-Return ONLY a JSON array in the same order as the input. Each element must be an object with "name" and "category". No other text.
+Return ONLY a valid JSON array, same length and order as input. Each element: {"name": "Clean Name", "category": "Category"}. No markdown, no explanation.
 
-Example: [{"name": "Roma Tomatoes", "category": "Produce"}, {"name": "Chicken Breast", "category": "Meat & Poultry"}]
-
-Input: ${JSON.stringify(names)}`
+Items: ${JSON.stringify(names)}`
                 }]
             })
         });
 
-        if (!response.ok) return items;
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            console.warn('Claude API error:', response.status, err?.error?.message);
+            return items;
+        }
 
         const data = await response.json();
         const text = (data.content?.[0]?.text || '').trim();
+        console.log('Claude response:', text.slice(0, 300));
 
         const match = text.match(/\[[\s\S]*\]/);
         if (match) {
@@ -111,13 +169,29 @@ Input: ${JSON.stringify(names)}`
                 return items.map((it, i) => ({
                     ...it,
                     name: cleaned[i]?.name || it.name,
-                    category: cleaned[i]?.category || 'Other',
+                    category: cleaned[i]?.category || '',
+                    _claudeCleaned: true,
                 }));
             }
         }
-    } catch (_) {}
+        console.warn('Claude response unparseable:', text.slice(0, 200));
+    } catch (e) {
+        console.warn('Claude cleanItemNames error:', e.message);
+    }
 
     return items;
+}
+
+function cleanNameRules(name) {
+    if (!name) return name;
+    let n = name.trim();
+    // Remove trailing numeric product codes
+    n = n.replace(/\s+#?\d{5,}$/, '');
+    // Convert ALL CAPS to Title Case as a minimum readability fix
+    if (n === n.toUpperCase() && n.length > 2) {
+        n = n.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    }
+    return n.trim() || name;
 }
 
 // Resize image to max 1600px and auto-correct EXIF rotation for mobile photos
