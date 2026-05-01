@@ -10,6 +10,11 @@ export async function saveReceipt(receipt) {
     return id;
 }
 
+export async function fetchReceipt(id) {
+    const snap = await getDoc(doc(db, 'receipts', String(id)));
+    return snap.exists() ? snap.data() : null;
+}
+
 export async function fetchReceipts() {
     const snap = await getDocs(collection(db, 'receipts'));
     return snap.docs.map(d => d.data()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));

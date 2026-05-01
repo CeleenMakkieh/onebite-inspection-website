@@ -54,20 +54,26 @@ export function ReceiptDash({ receipts, user, onUpload, onViewAll, setSelReceipt
         fetchBudgets().then(setBudgets);
     }, []);
 
+    const LOCS = ['Richardson', 'Fort Worth', 'Haslet'];
+
     const totalSpend = receipts.reduce((s, r) => s + (parseFloat(r.total) || 0), 0);
-    const monthReceipts = receipts.filter(r => r.date?.startsWith(thisMonth));
+
+    // Use upload date (createdAt) for budget tracking so recently scanned
+    // receipts always count — receipt printed dates may be from prior months
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+    const monthReceipts = receipts.filter(r => (r.createdAt || 0) >= monthStart);
     const monthSpend = monthReceipts.reduce((s, r) => s + (parseFloat(r.total) || 0), 0);
 
-    // Per-location spending this month
+    // Per-location spending this month (by upload date)
     const locationSpend = monthReceipts.reduce((acc, r) => {
-        const loc = r.location || 'Unknown';
-        acc[loc] = (acc[loc] || 0) + (parseFloat(r.total) || 0);
+        const loc = r.location || '';
+        if (loc) acc[loc] = (acc[loc] || 0) + (parseFloat(r.total) || 0);
         return acc;
     }, {});
 
-    // Locations to show in budget section
+    // Always show all known locations for owner; manager sees only theirs
     const budgetLocations = isOwner
-        ? [...new Set([...Object.keys(locationSpend), ...Object.keys(budgets)])]
+        ? LOCS
         : isManager && user.location ? [user.location] : [];
 
     const vendorTotals = Object.values(

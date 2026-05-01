@@ -1,18 +1,32 @@
 import { useState, useEffect } from 'react';
 import { G, WH, BK } from '../../constants';
-import { fetchReceiptItems, deleteReceipt, deleteReceiptItems } from '../../receiptDb';
+import { fetchReceipt, fetchReceiptItems, deleteReceipt, deleteReceiptItems } from '../../receiptDb';
 
 const SHADOW = '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06)';
 const TH = { textAlign: 'left', padding: '9px 12px', fontWeight: '700', color: '#64748b', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' };
 
-export function ReceiptDetail({ receipt, onBack, onDeleted }) {
+export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState(false);
+    const [imageUrl, setImageUrl] = useState(receipt.imageUrl || '');
 
     useEffect(() => {
         fetchReceiptItems(receipt.id).then(its => { setItems(its); setLoading(false); });
     }, [receipt.id]);
+
+    // Poll for imageUrl in case background upload hasn't finished yet
+    useEffect(() => {
+        if (imageUrl) return;
+        let attempts = 0;
+        const interval = setInterval(async () => {
+            attempts++;
+            const fresh = await fetchReceipt(receipt.id);
+            if (fresh?.imageUrl) { setImageUrl(fresh.imageUrl); clearInterval(interval); }
+            if (attempts >= 10) clearInterval(interval);
+        }, 3000);
+        return () => clearInterval(interval);
+    }, [receipt.id, imageUrl]);
 
     const handleDelete = async () => {
         if (!confirm(`Delete receipt from ${receipt.vendor} on ${receipt.date}?`)) return;
@@ -35,9 +49,11 @@ export function ReceiptDetail({ receipt, onBack, onDeleted }) {
                         {receipt.date}{receipt.receiptNumber ? ` · #${receipt.receiptNumber}` : ''}{receipt.location ? ` · ${receipt.location}` : ''}
                     </div>
                 </div>
-                <button onClick={handleDelete} disabled={deleting} style={{ padding: '8px 16px', background: deleting ? '#f1f5f9' : '#fee2e2', color: deleting ? '#94a3b8' : '#dc2626', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: deleting ? 'not-allowed' : 'pointer', fontFamily: 'system-ui,sans-serif' }}>
-                    {deleting ? 'Deleting…' : 'Delete'}
-                </button>
+                {user?.role === 'Owner' && (
+                    <button onClick={handleDelete} disabled={deleting} style={{ padding: '8px 16px', background: deleting ? '#f1f5f9' : '#fee2e2', color: deleting ? '#94a3b8' : '#dc2626', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: deleting ? 'not-allowed' : 'pointer', fontFamily: 'system-ui,sans-serif' }}>
+                        {deleting ? 'Deleting…' : 'Delete'}
+                    </button>
+                )}
             </div>
 
             {/* Totals */}
@@ -53,9 +69,13 @@ export function ReceiptDetail({ receipt, onBack, onDeleted }) {
             </div>
 
             {/* Receipt image */}
-            {receipt.imageUrl && (
+            {imageUrl ? (
                 <div style={{ background: WH, borderRadius: '16px', padding: '16px', boxShadow: SHADOW, marginBottom: '16px', textAlign: 'center' }}>
-                    <img src={receipt.imageUrl} alt="Receipt" style={{ maxWidth: '100%', maxHeight: '360px', objectFit: 'contain', borderRadius: '10px' }} />
+                    <img src={imageUrl} alt="Receipt" style={{ maxWidth: '100%', maxHeight: '360px', objectFit: 'contain', borderRadius: '10px' }} />
+                </div>
+            ) : (
+                <div style={{ background: WH, borderRadius: '16px', padding: '14px 20px', boxShadow: SHADOW, marginBottom: '16px', fontSize: '12px', color: '#94a3b8' }}>
+                    Photo uploading in background…
                 </div>
             )}
 

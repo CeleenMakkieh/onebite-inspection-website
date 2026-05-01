@@ -135,7 +135,7 @@ export function ReceiptPortal({ user, onSwitchPortal }) {
                         <>
                             {view === 'dashboard' && <ReceiptDash receipts={receipts} user={user} onUpload={() => setView('upload')} onViewAll={() => setView('all')} setSelReceipt={setSelReceipt} setView={setView} />}
                             {view === 'upload' && <ReceiptUpload user={user} onSaved={handleSaved} />}
-                            {view === 'detail' && selReceipt && <ReceiptDetail receipt={selReceipt} onBack={() => setView('all')} onDeleted={handleDeleted} />}
+                            {view === 'detail' && selReceipt && <ReceiptDetail receipt={selReceipt} user={user} onBack={() => setView('all')} onDeleted={handleDeleted} />}
                             {view === 'reports' && <ReceiptReports receipts={receipts} />}
                             {view === 'all' && (
                                 <div style={{ maxWidth: '860px' }}>
