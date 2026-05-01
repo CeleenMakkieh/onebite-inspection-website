@@ -294,26 +294,29 @@ export function ReceiptUpload({ user, onSaved }) {
         setUploading(true); setScanErr('');
         try {
             const id = String(Date.now());
-            let imageUrl = '';
-            if (file) imageUrl = await uploadReceiptImage(id, file);
             const receipt = {
                 id, vendor: vendor.trim(), date: date || new Date().toISOString().split('T')[0],
                 receiptNumber: receiptNumber.trim(), subtotal: parseFloat(subtotal) || 0,
                 tax: parseFloat(tax) || 0, total: parseFloat(total) || 0,
-                location, uploadedBy: user.name, createdAt: Date.now(), imageUrl, itemCount: items.length,
+                location, uploadedBy: user.name, createdAt: Date.now(), imageUrl: '', itemCount: items.length,
             };
-            await saveReceipt(receipt);
             const cleanItems = items.filter(it => it.name.trim()).map(it => ({
                 name: it.name.trim(), quantity: parseFloat(it.quantity) || 1, unit: it.unit || 'ea',
                 unitPrice: parseFloat(it.unitPrice) || 0, lineTotal: parseFloat(it.lineTotal) || 0,
                 category: it.category || '',
             }));
-            await saveReceiptItems(id, cleanItems);
+            await Promise.all([saveReceipt(receipt), saveReceiptItems(id, cleanItems)]);
             onSaved(receipt);
+            // Upload image in background after user is already done
+            if (file) {
+                uploadReceiptImage(id, file)
+                    .then(imageUrl => saveReceipt({ ...receipt, imageUrl }))
+                    .catch(() => {});
+            }
         } catch (e) {
             setScanErr('Failed to save: ' + (e.message || 'Unknown error'));
+            setUploading(false);
         }
-        setUploading(false);
     };
 
     const reset = () => {
