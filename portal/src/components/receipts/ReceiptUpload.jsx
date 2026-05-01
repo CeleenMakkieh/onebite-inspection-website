@@ -185,6 +185,7 @@ export function ReceiptUpload({ user, onSaved }) {
     const [file, setFile] = useState(null);
     const [preview, setPreview] = useState(null);
     const [scanning, setScanning] = useState(false);
+    const [scanStep, setScanStep] = useState('');
     const [uploading, setUploading] = useState(false);
     const [scanErr, setScanErr] = useState('');
     const [extracted, setExtracted] = useState(null);
@@ -217,7 +218,7 @@ export function ReceiptUpload({ user, onSaved }) {
         setItems(data.items?.length ? data.items.map(it => ({
             name: it.name || '', quantity: it.quantity ?? 1, unit: it.unit || 'ea',
             unitPrice: it.unitPrice ?? '', lineTotal: it.lineTotal ?? '',
-            confidence: it.confidence ?? 1,
+            confidence: it.confidence ?? 1, category: it.category || '',
         })) : [emptyItem()]);
         setSubtotal(data.subtotal ?? '');
         setTax(data.tax ?? '');
@@ -225,34 +226,33 @@ export function ReceiptUpload({ user, onSaved }) {
         setExtracted(data);
     };
 
-    // Called by camera after auto-capture — skips the upload screen, scans immediately
-    const handleAutoScan = async (capturedFile) => {
-        setShowCamera(false);
-        setFile(capturedFile);
-        setPreview(URL.createObjectURL(capturedFile));
+    const runScan = async (f) => {
         setScanning(true);
         setScanErr('');
+        setScanStep('Uploading image to OCR…');
         try {
-            const data = await scanReceiptImage(capturedFile);
+            setScanStep('Reading receipt with Veryfi OCR…');
+            const data = await scanReceiptImage(f);
+            setScanStep('Categorizing items…');
             populateFromScan(data);
         } catch (e) {
             setScanErr(e.message || 'Scan failed. Try again.');
             setExtracted({});
         }
         setScanning(false);
+        setScanStep('');
+    };
+
+    const handleAutoScan = async (capturedFile) => {
+        setShowCamera(false);
+        setFile(capturedFile);
+        setPreview(URL.createObjectURL(capturedFile));
+        await runScan(capturedFile);
     };
 
     const handleScan = async () => {
         if (!file) return;
-        setScanning(true);
-        setScanErr('');
-        try {
-            const data = await scanReceiptImage(file);
-            populateFromScan(data);
-        } catch (e) {
-            setScanErr(e.message || 'Scan failed. Try again.');
-        }
-        setScanning(false);
+        await runScan(file);
     };
 
     // Returns array of issue strings for a given item row
@@ -306,6 +306,7 @@ export function ReceiptUpload({ user, onSaved }) {
             const cleanItems = items.filter(it => it.name.trim()).map(it => ({
                 name: it.name.trim(), quantity: parseFloat(it.quantity) || 1, unit: it.unit || 'ea',
                 unitPrice: parseFloat(it.unitPrice) || 0, lineTotal: parseFloat(it.lineTotal) || 0,
+                category: it.category || '',
             }));
             await saveReceiptItems(id, cleanItems);
             onSaved(receipt);
@@ -321,14 +322,26 @@ export function ReceiptUpload({ user, onSaved }) {
         setSubtotal(''); setTax(''); setTotal('');
     };
 
-    // Show scanning intermediate state (camera captured, waiting for AI)
+    const STEPS = ['Uploading image to OCR…', 'Reading receipt with Veryfi OCR…', 'Categorizing items…'];
+    const stepIdx = STEPS.indexOf(scanStep);
+
     if (scanning && !extracted) {
         return (
             <div style={{ maxWidth: '900px' }}>
                 <div style={{ background: WH, borderRadius: '16px', padding: '48px 32px', boxShadow: '0 2px 12px rgba(0,0,0,0.07)', textAlign: 'center' }}>
-                    {preview && <img src={preview} alt="Receipt" style={{ maxHeight: '180px', maxWidth: '100%', borderRadius: '8px', objectFit: 'contain', marginBottom: '20px', opacity: 0.7 }} />}
-                    <div style={{ fontSize: '15px', fontWeight: '700', color: BK, marginBottom: '6px' }}>Reading receipt...</div>
-                    <div style={{ fontSize: '12px', color: '#aaa' }}>Extracting all items and prices</div>
+                    {preview && <img src={preview} alt="Receipt" style={{ maxHeight: '180px', maxWidth: '100%', borderRadius: '8px', objectFit: 'contain', marginBottom: '24px', opacity: 0.75 }} />}
+                    <div style={{ fontSize: '15px', fontWeight: '800', color: BK, marginBottom: '6px' }}>{scanStep || 'Processing…'}</div>
+                    <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '24px' }}>This usually takes 10–20 seconds</div>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        {STEPS.map((s, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: i < stepIdx ? G : i === stepIdx ? G : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.3s' }}>
+                                    {i < stepIdx ? <span style={{ color: WH, fontSize: '12px' }}>✓</span> : <span style={{ fontSize: '10px', fontWeight: '800', color: i === stepIdx ? WH : '#94a3b8' }}>{i + 1}</span>}
+                                </div>
+                                {i < STEPS.length - 1 && <div style={{ width: '32px', height: '2px', background: i < stepIdx ? G : '#e2e8f0', transition: 'background 0.3s' }} />}
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
         );
