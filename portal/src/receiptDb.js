@@ -1,5 +1,5 @@
 import { db, storage } from './firebase';
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, orderBy } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
 // ── Firestore ──
@@ -11,13 +11,13 @@ export async function saveReceipt(receipt) {
 }
 
 export async function fetchReceipts() {
-    const snap = await getDocs(query(collection(db, 'receipts'), orderBy('createdAt', 'desc')));
-    return snap.docs.map(d => d.data());
+    const snap = await getDocs(collection(db, 'receipts'));
+    return snap.docs.map(d => d.data()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
 export async function fetchReceiptsByLocation(location) {
-    const snap = await getDocs(query(collection(db, 'receipts'), where('location', '==', location), orderBy('createdAt', 'desc')));
-    return snap.docs.map(d => d.data());
+    const snap = await getDocs(query(collection(db, 'receipts'), where('location', '==', location)));
+    return snap.docs.map(d => d.data()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
 export async function deleteReceipt(id) {
