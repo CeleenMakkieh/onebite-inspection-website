@@ -1,5 +1,3 @@
-const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
-
 export async function scanReceiptImage(file) {
     const isPdf = file.type === 'application/pdf';
     const base64 = isPdf ? await fileToBase64Raw(file) : (await prepareImage(file)).base64;
@@ -11,11 +9,9 @@ export async function scanReceiptImage(file) {
     // Step 2: Map Veryfi response to app schema
     const receipt = mapVeryfiToSchema(veryfiData);
 
-    // Step 3: Clean names + categorize — Claude first, rule-based fallback for everything else
+    // Step 3: Clean names + categorize — Claude backend function first, rule-based fallback
     if (receipt.items.length > 0) {
-        if (ANTHROPIC_API_KEY) {
-            receipt.items = await cleanItemNames(receipt.items);
-        }
+        receipt.items = await cleanItemNames(receipt.items);
         // Rule-based cleaner fills in for any item Claude didn't handle
         receipt.items = receipt.items.map(it => ({
             ...it,
@@ -120,65 +116,42 @@ function guessCategory(name) {
     return 'Miscellaneous';
 }
 
-const CATEGORIES = ['Meat & Poultry', 'Produce & Fresh Items', 'Dairy & Eggs', 'Dry Goods & Pantry', 'Frozen Foods', 'Beverages', 'Spices & Condiments', 'Bread & Bakery', 'Containers & Supplies', 'Cleaning & Household', 'Pickles & Preserved Items', 'Adjustments & Fees', 'Miscellaneous'];
-
 async function cleanItemNames(items) {
     const names = items.map(it => it.name);
 
     try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
+        const response = await fetch('/.netlify/functions/clean-items', {
             method: 'POST',
-            headers: {
-                'x-api-key': ANTHROPIC_API_KEY,
-                'anthropic-version': '2023-06-01',
-                'anthropic-dangerous-direct-browser-access': 'true',
-                'content-type': 'application/json',
-            },
-            body: JSON.stringify({
-                model: 'claude-haiku-4-5-20251001',
-                max_tokens: 2048,
-                messages: [{
-                    role: 'user',
-                    content: `You are a grocery/restaurant supply receipt parser. These item names came from OCR scanning a receipt — they contain store brand prefixes, abbreviations, and product codes. Use your knowledge of food products to decode them.
-
-For each item:
-1. Write a clean, human-readable product name. Decode ALL abbreviations, remove store brand prefixes and item codes. Examples: "KRO KALE" → "Kale", "SNPC KIWI" → "Kiwi", "DELM UTRMLN" → "Del Monte Watermelon", "BNS CHKN BRS" → "Boneless Chicken Breast".
-2. Assign a category from ONLY this list: ${CATEGORIES.join(', ')}
-3. Set "confident" to true if you're confident in the decoded name, or false if you're guessing (e.g. unrecognized store codes you cannot decode).
-
-Return ONLY a valid JSON array, same length and order as input. Each element: {"name": "Clean Name", "category": "Category", "confident": true}. No markdown, no explanation.
-
-Items: ${JSON.stringify(names)}`
-                }]
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ names }),
         });
 
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            console.warn('Claude API error:', response.status, err?.error?.message);
+        const text = await response.text();
+        let cleaned;
+        try {
+            cleaned = JSON.parse(text);
+        } catch (_) {
+            console.warn('clean-items returned non-JSON:', text.slice(0, 200));
             return items;
         }
 
-        const data = await response.json();
-        const text = (data.content?.[0]?.text || '').trim();
-        console.log('Claude response:', text.slice(0, 300));
-
-        const match = text.match(/\[[\s\S]*\]/);
-        if (match) {
-            const cleaned = JSON.parse(match[0]);
-            if (Array.isArray(cleaned) && cleaned.length === items.length) {
-                return items.map((it, i) => ({
-                    ...it,
-                    name: cleaned[i]?.name || it.name,
-                    category: cleaned[i]?.category || '',
-                    _claudeCleaned: true,
-                    needsReview: cleaned[i]?.confident === false,
-                }));
-            }
+        if (!response.ok) {
+            console.warn('clean-items error:', cleaned?.error);
+            return items;
         }
-        console.warn('Claude response unparseable:', text.slice(0, 200));
+
+        if (Array.isArray(cleaned) && cleaned.length === items.length) {
+            return items.map((it, i) => ({
+                ...it,
+                name: cleaned[i]?.name || it.name,
+                category: cleaned[i]?.category || '',
+                _claudeCleaned: true,
+                needsReview: cleaned[i]?.confident === false,
+            }));
+        }
+        console.warn('clean-items unexpected response length');
     } catch (e) {
-        console.warn('Claude cleanItemNames error:', e.message);
+        console.warn('cleanItemNames error:', e.message);
     }
 
     return items;
