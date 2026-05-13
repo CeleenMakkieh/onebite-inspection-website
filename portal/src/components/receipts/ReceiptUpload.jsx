@@ -190,7 +190,10 @@ export function ReceiptUpload({ user, onSaved }) {
     const [scanErr, setScanErr] = useState('');
     const [extracted, setExtracted] = useState(null);
     const [showCamera, setShowCamera] = useState(false);
+    const [addingSection, setAddingSection] = useState(false);
+    const [sectionPreviews, setSectionPreviews] = useState([]);
     const fileRef = useRef();
+    const sectionFileRef = useRef();
 
     const [vendor, setVendor] = useState('');
     const [date, setDate] = useState('');
@@ -321,10 +324,39 @@ export function ReceiptUpload({ user, onSaved }) {
         }
     };
 
+    const handleAddSection = async (f) => {
+        if (!f) return;
+        setSectionPreviews(prev => [...prev, URL.createObjectURL(f)]);
+        setAddingSection(true);
+        setScanErr('');
+        try {
+            const data = await scanReceiptImage(f);
+            if (data.items?.length) {
+                setItems(prev => [
+                    ...prev,
+                    ...data.items.map(it => ({
+                        name: it.name || '', quantity: it.quantity ?? 1, unit: it.unit || 'ea',
+                        unitPrice: it.unitPrice ?? '', lineTotal: it.lineTotal ?? '',
+                        confidence: it.confidence ?? 1, category: it.category || '',
+                        needsReview: it.needsReview || false,
+                    })),
+                ]);
+            }
+            // Merge totals only if not yet set
+            if (!subtotal && data.subtotal) setSubtotal(data.subtotal);
+            if (!tax && data.tax) setTax(data.tax);
+            if (!total && data.total) setTotal(data.total);
+        } catch (e) {
+            setScanErr('Section scan failed: ' + (e.message || 'Try again.'));
+        }
+        setAddingSection(false);
+    };
+
     const reset = () => {
         setFile(null); setPreview(null); setExtracted(null); setScanErr('');
         setItems([emptyItem()]); setVendor(''); setDate(''); setReceiptNumber('');
         setSubtotal(''); setTax(''); setTotal('');
+        setSectionPreviews([]); setAddingSection(false);
     };
 
     const STEPS = ['Uploading image to OCR…', 'Reading receipt with Veryfi OCR…', 'Categorizing items…'];
@@ -433,13 +465,25 @@ export function ReceiptUpload({ user, onSaved }) {
                 ) : (
                     /* ── Review & Edit ── */
                     <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                            {preview && <img src={preview} alt="Receipt" style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #eee', flexShrink: 0 }} />}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                {preview && <img src={preview} alt="Receipt" style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #eee' }} />}
+                                {sectionPreviews.map((src, i) => (
+                                    <img key={i} src={src} alt={`Section ${i + 2}`} style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #eee' }} />
+                                ))}
+                            </div>
                             <div>
                                 <div style={{ fontSize: '17px', fontWeight: '800', color: BK }}>Review & Save</div>
-                                <div style={{ fontSize: '12px', color: '#888' }}>Check and edit if needed, then save.</div>
+                                <div style={{ fontSize: '12px', color: '#888' }}>{sectionPreviews.length > 0 ? `${1 + sectionPreviews.length} photos merged` : 'Check and edit if needed, then save.'}</div>
                             </div>
-                            <button onClick={reset} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #ddd', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', color: '#666', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', flexShrink: 0 }}>← Re-scan</button>
+                            <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', flexShrink: 0 }}>
+                                <input ref={sectionFileRef} type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={e => { if (e.target.files[0]) handleAddSection(e.target.files[0]); e.target.value = ''; }} />
+                                <button onClick={() => sectionFileRef.current.click()} disabled={addingSection}
+                                    style={{ background: addingSection ? '#f1f5f9' : '#eff6ff', color: addingSection ? '#94a3b8' : '#2563eb', border: 'none', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', cursor: addingSection ? 'not-allowed' : 'pointer', fontFamily: 'system-ui,sans-serif', whiteSpace: 'nowrap' }}>
+                                    {addingSection ? 'Scanning…' : '+ Scan next section'}
+                                </button>
+                                <button onClick={reset} style={{ background: 'none', border: '1px solid #ddd', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', color: '#666', cursor: 'pointer', fontFamily: 'system-ui,sans-serif' }}>← Re-scan</button>
+                            </div>
                         </div>
 
                         {/* Receipt Info */}
