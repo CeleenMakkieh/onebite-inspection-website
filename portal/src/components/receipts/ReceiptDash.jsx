@@ -58,13 +58,10 @@ export function ReceiptDash({ receipts, user, onUpload, onViewAll, setSelReceipt
 
     const totalSpend = receipts.reduce((s, r) => s + (parseFloat(r.total) || 0), 0);
 
-    // Use upload date (createdAt) for budget tracking so recently scanned
-    // receipts always count — receipt printed dates may be from prior months
-    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
-    const monthReceipts = receipts.filter(r => (r.createdAt || 0) >= monthStart);
+    const monthReceipts = receipts.filter(r => (r.date || '').startsWith(thisMonth));
     const monthSpend = monthReceipts.reduce((s, r) => s + (parseFloat(r.total) || 0), 0);
 
-    // Per-location spending this month (by upload date)
+    // Per-location spending this month (by receipt date)
     const locationSpend = monthReceipts.reduce((acc, r) => {
         const loc = r.location || '';
         if (loc) acc[loc] = (acc[loc] || 0) + (parseFloat(r.total) || 0);
