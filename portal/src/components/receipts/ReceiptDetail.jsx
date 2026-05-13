@@ -70,7 +70,11 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ names }),
             });
-            const cleaned = await res.json();
+            const text = await res.text();
+            let cleaned;
+            try { cleaned = JSON.parse(text); } catch (_) {
+                throw new Error('Server returned an unreadable response. Make sure the site is deployed or run netlify dev locally.');
+            }
             if (!res.ok) throw new Error(cleaned?.error || 'Re-clean failed');
             if (Array.isArray(cleaned) && cleaned.length === items.length) {
                 const updated = items.map((it, i) => ({
