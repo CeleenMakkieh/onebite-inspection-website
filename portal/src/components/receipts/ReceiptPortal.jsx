@@ -28,6 +28,11 @@ export function ReceiptPortal({ user, onSwitchPortal }) {
 
     const isStaff = user.role === 'Staff';
 
+    // Always keep staff away from dashboard/reports
+    useEffect(() => {
+        if (isStaff && (view === 'dashboard' || view === 'reports')) setView('all');
+    }, [isStaff, view]);
+
     useEffect(() => {
         async function load() {
             try {
@@ -48,7 +53,7 @@ export function ReceiptPortal({ user, onSwitchPortal }) {
 
     const handleSaved = (receipt) => {
         setReceipts(prev => [receipt, ...prev]);
-        setView('dashboard');
+        setView(isStaff ? 'all' : 'dashboard');
     };
 
     const handleDeleted = (id) => {
