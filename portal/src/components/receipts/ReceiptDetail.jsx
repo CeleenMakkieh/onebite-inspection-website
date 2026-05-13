@@ -127,6 +127,18 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
     const displayReceipt = editing ? { ...receipt, ...editReceipt } : receipt;
     const displayItems = editing ? editItems : items;
 
+    const itemsSum = displayItems.reduce((s, it) => s + (parseFloat(it.lineTotal) || 0), 0);
+    const subtotalVal = parseFloat(displayReceipt.subtotal) || 0;
+    const taxVal = parseFloat(displayReceipt.tax) || 0;
+    const totalVal = parseFloat(displayReceipt.total) || 0;
+    const mathWarnings = [];
+    if (displayItems.length > 0 && subtotalVal > 0 && Math.abs(itemsSum - subtotalVal) > 0.05) {
+        mathWarnings.push(`Item totals add up to ${fmt(itemsSum)}, but subtotal is ${fmt(subtotalVal)} (difference: ${fmt(Math.abs(itemsSum - subtotalVal))}).`);
+    }
+    if (subtotalVal > 0 && totalVal > 0 && Math.abs(subtotalVal + taxVal - totalVal) > 0.05) {
+        mathWarnings.push(`Subtotal ${fmt(subtotalVal)} + tax ${fmt(taxVal)} = ${fmt(subtotalVal + taxVal)}, but total is ${fmt(totalVal)}.`);
+    }
+
     return (
         <div style={{ maxWidth: '800px' }}>
             {/* Header */}
@@ -191,6 +203,17 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
                     <div style={{ fontSize: '22px', fontWeight: '900', color: BK, letterSpacing: '-0.02em' }}>{displayItems.length}</div>
                 </div>
             </div>
+
+            {/* Math warnings */}
+            {mathWarnings.length > 0 && (
+                <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#92400e', marginBottom: '4px' }}>Numbers don't add up</div>
+                    {mathWarnings.map((w, i) => (
+                        <div key={i} style={{ fontSize: '12px', color: '#92400e', lineHeight: 1.5 }}>{w}</div>
+                    ))}
+                    <div style={{ fontSize: '11px', color: '#b45309', marginTop: '6px' }}>Use Edit to correct the amounts.</div>
+                </div>
+            )}
 
             {/* Receipt image */}
             {imageUrl ? (
