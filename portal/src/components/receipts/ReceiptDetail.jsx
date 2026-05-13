@@ -23,6 +23,8 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
     const [saving, setSaving] = useState(false);
     const [editReceipt, setEditReceipt] = useState(null);
     const [editItems, setEditItems] = useState([]);
+    const [recleaning, setRecleaning] = useState(false);
+    const [recleanMsg, setRecleanMsg] = useState('');
 
     useEffect(() => {
         fetchReceiptItems(receipt.id).then(its => { setItems(its); setLoading(false); });
@@ -56,6 +58,36 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
     };
 
     const cancelEdit = () => { setEditing(false); setEditReceipt(null); setEditItems([]); };
+
+    const handleReclean = async () => {
+        if (items.length === 0) return;
+        setRecleaning(true);
+        setRecleanMsg('');
+        try {
+            const names = items.map(it => it.name);
+            const res = await fetch('/.netlify/functions/clean-items', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ names }),
+            });
+            const cleaned = await res.json();
+            if (!res.ok) throw new Error(cleaned?.error || 'Re-clean failed');
+            if (Array.isArray(cleaned) && cleaned.length === items.length) {
+                const updated = items.map((it, i) => ({
+                    ...it,
+                    name: cleaned[i]?.name || it.name,
+                    category: cleaned[i]?.category || it.category,
+                    needsReview: cleaned[i]?.confident === false,
+                }));
+                await saveReceiptItems(receipt.id, updated);
+                setItems(updated);
+                setRecleanMsg(`Updated ${items.length} items.`);
+            }
+        } catch (e) {
+            setRecleanMsg('Error: ' + e.message);
+        }
+        setRecleaning(false);
+    };
 
     const setItemField = (i, field, value) => {
         setEditItems(prev => {
@@ -120,6 +152,9 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
                 </div>
                 {user?.role === 'Owner' && !editing && (
                     <>
+                        <button onClick={handleReclean} disabled={recleaning || loading} style={{ padding: '8px 16px', background: recleaning ? '#f1f5f9' : '#f0fdf4', color: recleaning ? '#94a3b8' : G, border: `1.5px solid ${recleaning ? '#e2e8f0' : G}`, borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: recleaning || loading ? 'not-allowed' : 'pointer', fontFamily: 'system-ui,sans-serif' }}>
+                            {recleaning ? 'Re-cleaning…' : 'Re-clean with AI'}
+                        </button>
                         <button onClick={startEdit} style={{ padding: '8px 16px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'system-ui,sans-serif' }}>Edit</button>
                         <button onClick={handleDelete} disabled={deleting} style={{ padding: '8px 16px', background: deleting ? '#f1f5f9' : '#fee2e2', color: deleting ? '#94a3b8' : '#dc2626', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: deleting ? 'not-allowed' : 'pointer', fontFamily: 'system-ui,sans-serif' }}>
                             {deleting ? 'Deleting…' : 'Delete'}
@@ -132,6 +167,12 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
                     </button>
                 )}
             </div>
+
+            {recleanMsg && (
+                <div style={{ marginBottom: '16px', padding: '10px 16px', background: recleanMsg.startsWith('Error') ? '#fee2e2' : '#f0fdf4', border: `1px solid ${recleanMsg.startsWith('Error') ? '#fca5a5' : '#bbf7d0'}`, borderRadius: '8px', fontSize: '13px', color: recleanMsg.startsWith('Error') ? '#991b1b' : '#166534', fontWeight: '600' }}>
+                    {recleanMsg}
+                </div>
+            )}
 
             {/* Totals */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '14px', marginBottom: '20px' }}>
