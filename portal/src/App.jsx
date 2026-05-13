@@ -167,14 +167,8 @@ export default function App() {
 
     if (!user) return <LoginPage onLogin={handleLogin} />;
 
-    // Staff can only access inspection — skip portal selection
-    const canAccessReceipts = user.role === 'Owner' || user.role === 'Manager';
+    const canAccessReceipts = user.role === 'Owner' || user.role === 'Manager' || user.role === 'Staff';
     if (!activePortal) {
-        if (!canAccessReceipts) {
-            // Staff: auto-route to inspection, no choice
-            setActivePortal('inspection');
-            return null;
-        }
         return <PortalSelectPage user={user} onSelect={setActivePortal} />;
     }
 

@@ -25,6 +25,8 @@ export function ReceiptPortal({ user, onSwitchPortal }) {
         return () => window.removeEventListener('resize', check);
     }, []);
 
+    const isStaff = user.role === 'Staff';
+
     useEffect(() => {
         async function load() {
             try {
@@ -40,6 +42,9 @@ export function ReceiptPortal({ user, onSwitchPortal }) {
         load();
     }, [user]);
 
+    // Staff only see their own uploads
+    const visibleReceipts = isStaff ? receipts.filter(r => r.uploadedBy === user.name) : receipts;
+
     const handleSaved = (receipt) => {
         setReceipts(prev => [receipt, ...prev]);
         setView('dashboard');
@@ -50,19 +55,22 @@ export function ReceiptPortal({ user, onSwitchPortal }) {
         setView('all');
     };
 
-    const nav = [
+    const nav = isStaff ? [
+        { id: 'upload', label: 'Scan Receipt', icon: '+' },
+        { id: 'all', label: 'My Receipts', icon: '≡' },
+    ] : [
         { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
         { id: 'upload', label: 'Scan Receipt', icon: '+' },
         { id: 'all', label: 'All Receipts', icon: '≡' },
         { id: 'reports', label: 'Reports', icon: '▤' },
     ];
 
-    const titles = { dashboard: 'Receipt Dashboard', upload: 'Scan Receipt', all: 'All Receipts', detail: 'Receipt Detail', reports: 'Reports' };
+    const titles = { dashboard: 'Receipt Dashboard', upload: 'Scan Receipt', all: isStaff ? 'My Receipts' : 'All Receipts', detail: 'Receipt Detail', reports: 'Reports' };
 
     // Filtered receipts for the "All Receipts" list
-    const vendors = [...new Set(receipts.map(r => r.vendor))].sort();
-    const locations = [...new Set(receipts.map(r => r.location).filter(Boolean))].sort();
-    const filteredReceipts = receipts.filter(r =>
+    const vendors = [...new Set(visibleReceipts.map(r => r.vendor))].sort();
+    const locations = [...new Set(visibleReceipts.map(r => r.location).filter(Boolean))].sort();
+    const filteredReceipts = visibleReceipts.filter(r =>
         (!filterVendor || r.vendor === filterVendor) &&
         (!filterLoc || r.location === filterLoc)
     );
@@ -133,10 +141,10 @@ export function ReceiptPortal({ user, onSwitchPortal }) {
                         <div style={{ fontSize: '14px', color: '#aaa', padding: '40px' }}>Loading receipts…</div>
                     ) : (
                         <>
-                            {view === 'dashboard' && <ReceiptDash receipts={receipts} user={user} onUpload={() => setView('upload')} onViewAll={() => setView('all')} setSelReceipt={setSelReceipt} setView={setView} />}
+                            {view === 'dashboard' && <ReceiptDash receipts={visibleReceipts} user={user} onUpload={() => setView('upload')} onViewAll={() => setView('all')} setSelReceipt={setSelReceipt} setView={setView} />}
                             {view === 'upload' && <ReceiptUpload user={user} onSaved={handleSaved} />}
                             {view === 'detail' && selReceipt && <ReceiptDetail receipt={selReceipt} user={user} onBack={() => setView('all')} onDeleted={handleDeleted} />}
-                            {view === 'reports' && <ReceiptReports receipts={receipts} />}
+                            {view === 'reports' && <ReceiptReports receipts={visibleReceipts} />}
                             {view === 'all' && (
                                 <div style={{ maxWidth: '860px' }}>
                                     <div style={{ display: 'flex', gap: '10px', marginBottom: '18px', flexWrap: 'wrap', alignItems: 'center' }}>
