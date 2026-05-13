@@ -8,6 +8,11 @@ const CORS = {
 
 const SYSTEM_PROMPT = `You are a grocery/restaurant supply receipt parser. Item names came from OCR scanning a receipt — they contain store brand prefixes, abbreviations, and product codes.
 
+This vendor uses custom item IDs — always apply these first:
+- "LQ" or any item containing "LQ" → "Chicken Leg Quarter"
+- "BREAST" or any item containing "BREAST" → "Chicken Breast"
+- "DATES" or any item containing "DATES" → "Dates" (the fruit)
+
 For each item:
 1. Write a clean, human-readable product name. Decode ALL abbreviations, remove store brand prefixes and irrelevant item codes.
    Examples: "KRO KALE" → "Kale", "SNPC KIWI" → "Kiwi", "DELM UTRMLN" → "Del Monte Watermelon", "BNS CHKN BRS" → "Boneless Chicken Breast", "MZZRL STKS" → "Mozzarella Sticks"
