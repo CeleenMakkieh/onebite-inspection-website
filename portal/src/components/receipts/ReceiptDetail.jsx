@@ -25,6 +25,7 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
     const [editItems, setEditItems] = useState([]);
     const [recleaning, setRecleaning] = useState(false);
     const [recleanMsg, setRecleanMsg] = useState('');
+    const [mathDismissed, setMathDismissed] = useState(false);
 
     useEffect(() => {
         fetchReceiptItems(receipt.id).then(its => { setItems(its); setLoading(false); });
@@ -79,13 +80,13 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
             if (Array.isArray(cleaned) && cleaned.length === items.length) {
                 const updated = items.map((it, i) => ({
                     ...it,
-                    name: cleaned[i]?.name || it.name,
                     category: cleaned[i]?.category || it.category,
-                    needsReview: cleaned[i]?.confident === false,
+                    needsReview: false,
                 }));
                 await saveReceiptItems(receipt.id, updated);
                 setItems(updated);
-                setRecleanMsg(`Updated ${items.length} items.`);
+                setMathDismissed(true);
+                setRecleanMsg(`Categories updated for ${items.length} items.`);
             }
         } catch (e) {
             setRecleanMsg('Error: ' + e.message);
@@ -209,13 +210,16 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
             </div>
 
             {/* Math warnings */}
-            {mathWarnings.length > 0 && (
-                <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '10px' }}>
-                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#92400e', marginBottom: '4px' }}>Numbers don't add up</div>
-                    {mathWarnings.map((w, i) => (
-                        <div key={i} style={{ fontSize: '12px', color: '#92400e', lineHeight: 1.5 }}>{w}</div>
-                    ))}
-                    <div style={{ fontSize: '11px', color: '#b45309', marginTop: '6px' }}>Use Edit to correct the amounts.</div>
+            {mathWarnings.length > 0 && !mathDismissed && (
+                <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '10px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '12px', fontWeight: '800', color: '#92400e', marginBottom: '4px' }}>Numbers don't add up</div>
+                        {mathWarnings.map((w, i) => (
+                            <div key={i} style={{ fontSize: '12px', color: '#92400e', lineHeight: 1.5 }}>{w}</div>
+                        ))}
+                        <div style={{ fontSize: '11px', color: '#b45309', marginTop: '6px' }}>Use Edit to correct the amounts.</div>
+                    </div>
+                    <button onClick={() => setMathDismissed(true)} style={{ background: 'none', border: 'none', color: '#b45309', fontSize: '16px', cursor: 'pointer', padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>✕</button>
                 </div>
             )}
 
