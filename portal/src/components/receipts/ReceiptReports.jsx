@@ -27,6 +27,7 @@ export function ReceiptReports({ receipts }) {
     const [allItems, setAllItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState('categories');
+    const [expandedCat, setExpandedCat] = useState(null);
     const [exportFrom, setExportFrom] = useState(firstOfMonth);
     const [exportTo, setExportTo] = useState(today);
 
@@ -244,18 +245,60 @@ export function ReceiptReports({ receipts }) {
                     </div>
                     {categoryTotals.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '13px', padding: '32px', textAlign: 'center' }}>No data yet — scan receipts to see categories</div> : (
                         <div style={{ padding: '8px 0' }}>
-                            {categoryTotals.map((cat, i) => (
-                                <div key={i} style={{ padding: '14px 22px', borderBottom: i < categoryTotals.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                        <div style={{ fontWeight: '700', fontSize: '13px', color: BK }}>{cat.category}</div>
-                                        <div style={{ fontSize: '14px', fontWeight: '800', color: G }}>${cat.totalSpend.toFixed(2)}</div>
+                            {categoryTotals.map((cat, i) => {
+                                const isOpen = expandedCat === cat.category;
+                                const catItems = allItems.filter(it => (it.category || 'Other') === cat.category).sort((a, b) => (parseFloat(b.lineTotal) || 0) - (parseFloat(a.lineTotal) || 0));
+                                return (
+                                    <div key={i} style={{ borderBottom: i < categoryTotals.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                                        <div onClick={() => setExpandedCat(isOpen ? null : cat.category)}
+                                            style={{ padding: '14px 22px', cursor: 'pointer', transition: 'background 0.15s', background: isOpen ? '#f8fafc' : 'transparent' }}
+                                            onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = '#f8fafc'; }}
+                                            onMouseLeave={e => { if (!isOpen) e.currentTarget.style.background = 'transparent'; }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <span style={{ fontSize: '13px', color: '#94a3b8', transition: 'transform 0.2s', display: 'inline-block', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                                                    <div style={{ fontWeight: '700', fontSize: '13px', color: BK }}>{cat.category}</div>
+                                                </div>
+                                                <div style={{ fontSize: '14px', fontWeight: '800', color: G }}>${cat.totalSpend.toFixed(2)}</div>
+                                            </div>
+                                            <div style={{ height: '6px', background: '#f1f5f9', borderRadius: '99px', overflow: 'hidden' }}>
+                                                <div style={{ height: '100%', borderRadius: '99px', background: `linear-gradient(90deg, ${G}, #00c47a)`, width: `${maxCatSpend > 0 ? (cat.totalSpend / maxCatSpend) * 100 : 0}%`, transition: 'width 0.4s ease' }} />
+                                            </div>
+                                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '5px' }}>{cat.count} line item{cat.count !== 1 ? 's' : ''} — click to expand</div>
+                                        </div>
+                                        {isOpen && (
+                                            <div style={{ borderTop: `2px solid rgba(0,138,95,0.12)`, background: '#f8fafc', overflowX: 'auto' }}>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                                                    <thead>
+                                                        <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                                                            {['Item', 'Vendor', 'Date', 'Qty', 'Unit Price', 'Total'].map(h => (
+                                                                <th key={h} style={{ ...TH, padding: '7px 16px', background: '#f0fdf4' }}>{h}</th>
+                                                            ))}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {catItems.map((it, j) => (
+                                                            <tr key={j} style={{ borderBottom: j < catItems.length - 1 ? '1px solid #f1f5f9' : 'none' }}
+                                                                onMouseEnter={e => e.currentTarget.style.background = '#ecfdf5'}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                                <td style={{ padding: '8px 16px', fontWeight: '600', color: BK }}>
+                                                                    {it.name}
+                                                                    {it.needsReview && <span style={{ marginLeft: '6px', fontSize: '10px', background: '#fef3c7', color: '#d97706', padding: '1px 5px', borderRadius: '99px', fontWeight: '700' }}>Review</span>}
+                                                                </td>
+                                                                <td style={{ padding: '8px 16px', color: '#64748b' }}>{it.vendor}</td>
+                                                                <td style={{ padding: '8px 16px', color: '#94a3b8', whiteSpace: 'nowrap' }}>{it.date}</td>
+                                                                <td style={{ padding: '8px 16px', color: '#64748b' }}>{it.quantity}</td>
+                                                                <td style={{ padding: '8px 16px', color: '#64748b' }}>{it.unitPrice > 0 ? `$${parseFloat(it.unitPrice).toFixed(2)}` : '—'}</td>
+                                                                <td style={{ padding: '8px 16px', fontWeight: '700', color: G }}>${(parseFloat(it.lineTotal) || 0).toFixed(2)}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div style={{ height: '6px', background: '#f1f5f9', borderRadius: '99px', overflow: 'hidden' }}>
-                                        <div style={{ height: '100%', borderRadius: '99px', background: `linear-gradient(90deg, ${G}, #00c47a)`, width: `${maxCatSpend > 0 ? (cat.totalSpend / maxCatSpend) * 100 : 0}%`, transition: 'width 0.4s ease' }} />
-                                    </div>
-                                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '5px' }}>{cat.count} line item{cat.count !== 1 ? 's' : ''}</div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>
