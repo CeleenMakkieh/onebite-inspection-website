@@ -10,7 +10,8 @@ import { ReceiptReports } from './ReceiptReports';
 
 
 export function ReceiptPortal({ user, onSwitchPortal }) {
-    const [view, setView] = useState('dashboard');
+    const isStaffInit = user.role === 'Staff';
+    const [view, setView] = useState(isStaffInit ? 'all' : 'dashboard');
     const [receipts, setReceipts] = useState([]);
     const [selReceipt, setSelReceipt] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -129,7 +130,7 @@ export function ReceiptPortal({ user, onSwitchPortal }) {
                         </button>
                         <h1 style={{ margin: 0, fontSize: isMobile ? '17px' : '22px', fontWeight: '800', color: G }}>{titles[view] || '—'}</h1>
                     </div>
-                    {view === 'dashboard' && (
+                    {view === 'dashboard' && !isStaff && (
                         <button onClick={() => setView('upload')} style={{ padding: '9px 16px', background: G, color: WH, border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'system-ui,sans-serif' }}>
                             + Scan Receipt
                         </button>
@@ -141,7 +142,7 @@ export function ReceiptPortal({ user, onSwitchPortal }) {
                         <div style={{ fontSize: '14px', color: '#aaa', padding: '40px' }}>Loading receipts…</div>
                     ) : (
                         <>
-                            {view === 'dashboard' && <ReceiptDash receipts={visibleReceipts} user={user} onUpload={() => setView('upload')} onViewAll={() => setView('all')} setSelReceipt={setSelReceipt} setView={setView} />}
+                            {view === 'dashboard' && !isStaff && <ReceiptDash receipts={visibleReceipts} user={user} onUpload={() => setView('upload')} onViewAll={() => setView('all')} setSelReceipt={setSelReceipt} setView={setView} />}
                             {view === 'upload' && <ReceiptUpload user={user} onSaved={handleSaved} />}
                             {view === 'detail' && selReceipt && <ReceiptDetail receipt={selReceipt} user={user} onBack={() => setView('all')} onDeleted={handleDeleted} />}
                             {view === 'reports' && <ReceiptReports receipts={visibleReceipts} />}
