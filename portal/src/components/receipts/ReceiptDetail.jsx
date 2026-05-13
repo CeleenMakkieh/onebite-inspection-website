@@ -80,6 +80,7 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
             if (Array.isArray(cleaned) && cleaned.length === items.length) {
                 const updated = items.map((it, i) => ({
                     ...it,
+                    name: cleaned[i]?.name || it.name,
                     category: cleaned[i]?.category || it.category,
                     needsReview: false,
                 }));
