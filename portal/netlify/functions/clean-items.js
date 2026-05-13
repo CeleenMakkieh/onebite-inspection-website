@@ -12,7 +12,7 @@ This vendor uses custom item IDs — always apply these first:
 - "LQ" or any item containing "LQ" → "Chicken Leg Quarter"
 - "BREAST" or any item containing "BREAST" → "Chicken Breast"
 - "DATES" or any item containing "DATES" → "Dates" (the fruit)
-- "SHOESTRING" or any item containing "SHOESTRING" → "Frozen Shoestring Fries" (category: Frozen Foods)
+- Any item containing "SHOESTRING" → append "Fries" next to it if not already present (e.g. "SHOESTRING" → "Shoestring Fries", "SWEET SHOESTRING" → "Sweet Shoestring Fries") (category: Frozen Foods)
 
 For each item:
 1. Write a clean, human-readable product name. Decode ALL abbreviations, remove store brand prefixes and irrelevant item codes.
