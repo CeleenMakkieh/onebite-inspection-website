@@ -5,7 +5,7 @@ import { signOut } from 'firebase/auth';
 const SHADOW = '0 1px 4px rgba(0,0,0,0.06), 0 8px 32px rgba(0,0,0,0.08)';
 
 export function PortalSelectPage({ user, onSelect }) {
-    const canReceipts = user.role === 'Owner' || user.role === 'Manager';
+    const canReceipts = user.role === 'Owner' || user.role === 'Manager' || user.role === 'Staff';
 
     return (
         <div style={{ minHeight: '100vh', background: PINK, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui,sans-serif', padding: '24px' }}>
