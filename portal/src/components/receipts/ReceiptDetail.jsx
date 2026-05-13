@@ -167,7 +167,7 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
                         </>
                     )}
                 </div>
-                {user?.role === 'Owner' && !editing && (
+                {(user?.role === 'Owner' || user?.role === 'Manager') && !editing && (
                     <>
                         <button onClick={handleReclean} disabled={recleaning || loading} style={{ padding: '8px 16px', background: recleaning ? '#f1f5f9' : '#f0fdf4', color: recleaning ? '#94a3b8' : G, border: `1.5px solid ${recleaning ? '#e2e8f0' : G}`, borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: recleaning || loading ? 'not-allowed' : 'pointer', fontFamily: 'system-ui,sans-serif' }}>
                             {recleaning ? 'Re-cleaning…' : 'Re-clean with AI'}
