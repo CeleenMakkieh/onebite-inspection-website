@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { G, WH, BK } from '../../constants';
-import { fetchReceipt, fetchReceiptItems, deleteReceipt, deleteReceiptItems, saveReceipt, saveReceiptItems } from '../../receiptDb';
+import { fetchReceipt, fetchReceiptItems, deleteReceipt, deleteReceiptItems, saveReceipt, saveReceiptItems, uploadReceiptImage } from '../../receiptDb';
 
 const SHADOW = '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06)';
 const TH = { textAlign: 'left', padding: '9px 12px', fontWeight: '700', color: '#64748b', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' };
@@ -26,6 +26,9 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
     const [recleaning, setRecleaning] = useState(false);
     const [recleanMsg, setRecleanMsg] = useState('');
     const [mathDismissed, setMathDismissed] = useState(false);
+    const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [photoErr, setPhotoErr] = useState('');
+    const photoRef = useRef();
 
     useEffect(() => {
         fetchReceiptItems(receipt.id).then(its => { setItems(its); setLoading(false); });
@@ -59,6 +62,21 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
     };
 
     const cancelEdit = () => { setEditing(false); setEditReceipt(null); setEditItems([]); };
+
+    const handlePhotoUpload = async (file) => {
+        if (!file) return;
+        setUploadingPhoto(true);
+        setPhotoErr('');
+        try {
+            const url = await uploadReceiptImage(receipt.id, file);
+            await saveReceipt({ ...receipt, imageUrl: url });
+            receipt.imageUrl = url;
+            setImageUrl(url);
+        } catch (e) {
+            setPhotoErr('Upload failed: ' + e.message);
+        }
+        setUploadingPhoto(false);
+    };
 
     const handleReclean = async () => {
         if (items.length === 0) return;
@@ -226,12 +244,28 @@ export function ReceiptDetail({ receipt, user, onBack, onDeleted }) {
 
             {/* Receipt image */}
             {imageUrl ? (
-                <div style={{ background: WH, borderRadius: '16px', padding: '16px', boxShadow: SHADOW, marginBottom: '16px', textAlign: 'center' }}>
+                <div style={{ background: WH, borderRadius: '16px', padding: '16px', boxShadow: SHADOW, marginBottom: '16px', textAlign: 'center', position: 'relative' }}>
                     <img src={imageUrl} alt="Receipt" style={{ maxWidth: '100%', maxHeight: '360px', objectFit: 'contain', borderRadius: '10px' }} />
+                    {(user?.role === 'Owner' || user?.role === 'Manager') && (
+                        <div style={{ marginTop: '10px' }}>
+                            <input ref={photoRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files[0]) handlePhotoUpload(e.target.files[0]); e.target.value = ''; }} />
+                            <button onClick={() => photoRef.current.click()} disabled={uploadingPhoto} style={{ fontSize: '11px', color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', textDecoration: 'underline' }}>
+                                {uploadingPhoto ? 'Uploading…' : 'Replace photo'}
+                            </button>
+                        </div>
+                    )}
                 </div>
             ) : (
-                <div style={{ background: WH, borderRadius: '16px', padding: '14px 20px', boxShadow: SHADOW, marginBottom: '16px', fontSize: '12px', color: '#94a3b8' }}>
-                    Photo uploading in background…
+                <div style={{ background: WH, borderRadius: '16px', padding: '16px 20px', boxShadow: SHADOW, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                    <input ref={photoRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files[0]) handlePhotoUpload(e.target.files[0]); e.target.value = ''; }} />
+                    <span style={{ fontSize: '12px', color: '#94a3b8', flex: 1 }}>No photo attached</span>
+                    {(user?.role === 'Owner' || user?.role === 'Manager') && (
+                        <button onClick={() => photoRef.current.click()} disabled={uploadingPhoto}
+                            style={{ padding: '7px 14px', background: uploadingPhoto ? '#f1f5f9' : '#f8fafc', color: uploadingPhoto ? '#94a3b8' : BK, border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: uploadingPhoto ? 'not-allowed' : 'pointer', fontFamily: 'system-ui,sans-serif' }}>
+                            {uploadingPhoto ? 'Uploading…' : 'Upload photo'}
+                        </button>
+                    )}
+                    {photoErr && <div style={{ width: '100%', fontSize: '12px', color: '#dc2626' }}>{photoErr}</div>}
                 </div>
             )}
 
